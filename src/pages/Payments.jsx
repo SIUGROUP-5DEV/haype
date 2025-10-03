@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, Edit2, Edit, Trash2 } from 'lucide-react';
+import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, CreditCard as Edit2, CreditCard as Edit, Trash2 } from 'lucide-react';
 import Button from '../components/Button';
 import FormInput from '../components/FormInput';
 import FormSelect from '../components/FormSelect';

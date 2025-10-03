@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, User, Phone, DollarSign, Calendar, Filter, Printer, Edit, Eye, Plus, Minus, CreditCard } from 'lucide-react';
+import { ArrowLeft, User, Phone, DollarSign, Calendar, Filter, Printer, CreditCard as Edit, Eye, Plus, Minus, CreditCard } from 'lucide-react';
 import Button from '../components/Button';
 import Table from '../components/Table';
 import DateFilter from '../components/DateFilter';
