@@ -918,7 +918,7 @@ app.post('/api/payments/receive', authenticateToken, async (req, res) => {
 
 app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
   try {
-    const { accountType, recipientId, accountMonth, invoiceNo, amount, description, paymentDate } = req.body;
+    const { accountType, recipientId, accountMonth, paymentNo, amount, description, paymentDate } = req.body;
 
     if (!accountType || !recipientId || !amount || !paymentDate) {
       return res.status(400).json({ error: 'Account type, recipient, amount, and payment date are required' });
@@ -926,11 +926,11 @@ app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
 
     const paymentData = {
       type: 'payment_out',
-      paymentNo,
+      paymentNo: paymentNo || null,
       amount,
       description,
       paymentDate,
-      accountMonth
+      accountMonth: accountMonth || null
     };
 
     if (accountType === 'employee') {

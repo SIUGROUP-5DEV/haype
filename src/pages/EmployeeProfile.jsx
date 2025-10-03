@@ -106,12 +106,12 @@ const EmployeeProfile = () => {
 
   const loadPaymentHistory = async () => {
     try {
-      // Payment history is not stored separately for employees
-      // Just set empty array or show balance information
-      setPaymentHistory([]);
-      console.log('✅ Employee payment history cleared (not implemented)');
+      const response = await employeesAPI.getPaymentHistory(id);
+      setPaymentHistory(response.data || []);
+      console.log('✅ Employee payment history loaded:', response.data);
     } catch (error) {
       console.error('❌ Error loading payment history:', error);
+      // Don't show error to user if payment history doesn't exist
       setPaymentHistory([]);
     }
   };
