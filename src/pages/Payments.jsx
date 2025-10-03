@@ -72,32 +72,24 @@ const [editPaymentData, setEditPaymentData] = useState(null);
   const generateAccountMonths = () => {
     const months = [];
     const currentDate = new Date();
-    
+
     // Generate 12 months (current + 11 previous)
     for (let i = 0; i < 12; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const monthKey = date.toISOString().slice(0, 7); // YYYY-MM format
-      const monthLabel = date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long' 
+      const monthLabel = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long'
       });
-      
+
       months.push({
         value: monthKey,
         label: monthLabel,
         status: i === 0 ? 'Active' : 'Closed' // Current month is active, others are closed
       });
     }
-    
+
     setAccountMonths(months);
-    
-    // Auto-select current month
-    if (months.length > 0) {
-      setPaymentOutFormData(prev => ({
-        ...prev,
-        accountMonth: months[0].value
-      }));
-    }
   };
 
   const generateNextPaymentNumber = () => {
@@ -232,9 +224,13 @@ const handleEditPaymentSubmit = async (e) => {
       paymentNo: editPaymentData.paymentNo,
       amount: parseFloat(editPaymentData.amount || 0),
       description: editPaymentData.description,
-      paymentDate: editPaymentData.paymentDate,
-      accountMonth: editPaymentData.accountMonth
+      paymentDate: editPaymentData.paymentDate
     };
+
+    // Only include accountMonth if it exists (for backwards compatibility)
+    if (editPaymentData.accountMonth) {
+      payload.accountMonth = editPaymentData.accountMonth;
+    }
 
     await paymentsAPI.update(editPaymentData._id, payload);
     showSuccess('Payment Updated', `Payment ${editPaymentData.paymentNo} updated`);

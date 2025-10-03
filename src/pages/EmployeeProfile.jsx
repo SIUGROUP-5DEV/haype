@@ -106,13 +106,12 @@ const EmployeeProfile = () => {
 
   const loadPaymentHistory = async () => {
     try {
-      // Use the new payment history endpoint
-      const response = await employeesAPI.getPaymentHistory(id);
-      setPaymentHistory(response.data);
-      console.log('✅ Employee payment history loaded:', response.data);
+      // Payment history is not stored separately for employees
+      // Just set empty array or show balance information
+      setPaymentHistory([]);
+      console.log('✅ Employee payment history cleared (not implemented)');
     } catch (error) {
       console.error('❌ Error loading payment history:', error);
-      showError('Load Failed', 'Failed to load payment history');
       setPaymentHistory([]);
     }
   };
