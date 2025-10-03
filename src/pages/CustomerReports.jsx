@@ -483,6 +483,12 @@ const CustomerReports = () => {
                   </option>
                 ))}
               </select>
+
+                          <SearchInput
+                            placeholder="Search by name or phone..."
+                            value={searchTerm}
+                            onChange={setSearchTerm}
+                          />
             </div>
             
             <div className="flex items-center space-x-4">
