@@ -175,20 +175,24 @@ const EmployeeProfile = () => {
 
   const handleAddBalance = async (e) => {
     e.preventDefault();
-    
+
     if (!balanceFormData.amount || !balanceFormData.date || !balanceFormData.description) {
       showError('Validation Error', 'Please fill in all fields');
       return;
     }
 
     setBalanceLoading(true);
-    
+
     try {
-      // Call API to add balance
-      const response = await employeesAPI.addBalance(id, balanceFormData);
-      
-      showSuccess('Balance Added', `$${balanceFormData.amount} has been added to ${employee.employeeName}'s balance`);
-      
+      const amount = parseFloat(balanceFormData.amount);
+      const currentBalance = employee.balance || 0;
+      const newBalance = currentBalance + amount;
+
+      // Update employee balance
+      await employeesAPI.update(id, { balance: newBalance });
+
+      showSuccess('Balance Added', `$${amount} has been added to ${employee.employeeName}'s balance`);
+
       // Reset form and close modal
       setBalanceFormData({
         amount: '',
@@ -196,14 +200,14 @@ const EmployeeProfile = () => {
         description: ''
       });
       setShowAddBalanceModal(false);
-      
+
       // Reload data
       loadEmployeeData();
       loadPaymentHistory();
-      
+
     } catch (error) {
       console.error('❌ Error adding balance:', error);
-      showError('Add Balance Failed', 'Failed to add balance. Please try again.');
+      showError('Add Balance Failed', error.response?.data?.message || 'Failed to add balance. Please try again.');
     } finally {
       setBalanceLoading(false);
     }
@@ -211,20 +215,24 @@ const EmployeeProfile = () => {
 
   const handleDeductBalance = async (e) => {
     e.preventDefault();
-    
+
     if (!balanceFormData.amount || !balanceFormData.date || !balanceFormData.description) {
       showError('Validation Error', 'Please fill in all fields');
       return;
     }
 
     setBalanceLoading(true);
-    
+
     try {
-      // Call API to deduct balance
-      const response = await employeesAPI.deductBalance(id, balanceFormData);
-      
-      showSuccess('Balance Deducted', `$${balanceFormData.amount} has been deducted from ${employee.employeeName}'s balance`);
-      
+      const amount = parseFloat(balanceFormData.amount);
+      const currentBalance = employee.balance || 0;
+      const newBalance = Math.max(0, currentBalance - amount);
+
+      // Update employee balance
+      await employeesAPI.update(id, { balance: newBalance });
+
+      showSuccess('Balance Deducted', `$${amount} has been deducted from ${employee.employeeName}'s balance`);
+
       // Reset form and close modal
       setBalanceFormData({
         amount: '',
@@ -232,14 +240,14 @@ const EmployeeProfile = () => {
         description: ''
       });
       setShowDeductBalanceModal(false);
-      
+
       // Reload data
       loadEmployeeData();
       loadPaymentHistory();
-      
+
     } catch (error) {
       console.error('❌ Error deducting balance:', error);
-      showError('Deduct Balance Failed', 'Failed to deduct balance. Please try again.');
+      showError('Deduct Balance Failed', error.response?.data?.message || 'Failed to deduct balance. Please try again.');
     } finally {
       setBalanceLoading(false);
     }
