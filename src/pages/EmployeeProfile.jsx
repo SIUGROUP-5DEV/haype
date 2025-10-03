@@ -644,10 +644,6 @@ const EmployeeProfile = () => {
               </div>
             </form>
           </div>
-
-
-<Footer/>
-
         </div>
       )}
 
@@ -658,6 +654,8 @@ const EmployeeProfile = () => {
         invoiceNo={selectedInvoice}
         mode={modalMode}
       />
+
+      <Footer />
     </div>
   );
 };

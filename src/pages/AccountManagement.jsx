@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Calendar, FileText, TrendingUp, Download, UserX, Car as CarIcon, UserCheck, Building2, AlertTriangle, DollarSign, RotateCcw, Filter } from 'lucide-react';
+import { Settings, Calendar, FileText, TrendingUp, Download, UserX, Car as CarIcon, UserCheck, Building2, AlertTriangle, DollarSign, RotateCcw, Filter, CreditCard } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Button from '../components/Button';
 import FormSelect from '../components/FormSelect';
 import FormInput from '../components/FormInput';
+import DateFilter from '../components/DateFilter';
 import { useToast } from '../contexts/ToastContext';
 import { carsAPI, customersAPI, dashboardAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 
 const AccountManagement = () => {
   const { showSuccess, showError, showWarning } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [viewPeriod, setViewPeriod] = useState('monthly');
+  const [creditDateRange, setCreditDateRange] = useState({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
 
   // Monthly closing state
   const [monthlyClosingLoading, setMonthlyClosingLoading] = useState(false);
@@ -245,12 +253,61 @@ const AccountManagement = () => {
 
   const profitData = calculateMonthlyProfit();
 
+  // Calculate total credit (customers who owe money)
+  const calculateTotalCredit = () => {
+    return customers.reduce((sum, customer) => sum + (customer.balance || 0), 0);
+  };
+
+  const totalCredit = calculateTotalCredit();
+
+  // Handle Total Credit card click
+  const handleTotalCreditClick = () => {
+    navigate('/credit-overview', {
+      state: {
+        dateRange: creditDateRange,
+        customers: customers.filter(c => (c.balance || 0) > 0)
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Account Management</h1>
         <p className="text-gray-600">Manage monthly accounts and car account linking</p>
+      </div>
+
+      {/* Total Credit Card */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <CreditCard className="w-8 h-8 text-red-600 mr-3" />
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Total Credit Overview</h3>
+              <p className="text-gray-600">Outstanding customer debts</p>
+            </div>
+          </div>
+          <DateFilter
+            dateRange={creditDateRange}
+            onDateChange={setCreditDateRange}
+            showApplyButton={false}
+          />
+        </div>
+
+        <div
+          onClick={handleTotalCreditClick}
+          className="bg-red-50 border-2 border-red-200 rounded-lg p-6 cursor-pointer hover:bg-red-100 transition-colors"
+        >
+          <div className="text-center">
+            <p className="text-sm text-red-700 mb-2">Total Outstanding Credit</p>
+            <p className="text-4xl font-bold text-red-600">${totalCredit.toLocaleString()}</p>
+            <p className="text-sm text-red-600 mt-2">
+              {customers.filter(c => (c.balance || 0) > 0).length} customers with outstanding balances
+            </p>
+            <p className="text-xs text-gray-600 mt-2">Click to view detailed breakdown</p>
+          </div>
+        </div>
       </div>
 
       {/* Current Month Status with Profit Preview */}

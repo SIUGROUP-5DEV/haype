@@ -24,6 +24,7 @@ import InvoiceCenter from './pages/InvoiceCenter';
 import CreateInvoice from './pages/CreateInvoice';
 import Payments from './pages/Payments';
 import AccountManagement from './pages/AccountManagement';
+import CreditOverview from './pages/CreditOverview';
 import UserCenter from './pages/UserCenter';
 import CreateUser from './pages/CreateUser';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -70,6 +71,7 @@ function App() {
                 {/* Other Routes */}
                 <Route path="/payments" element={<Payments />} />
                 <Route path="/account-management" element={<AccountManagement />} />
+                <Route path="/credit-overview" element={<CreditOverview />} />
                 <Route path="/users" element={<UserCenter />} />
                 <Route path="/users/create" element={<CreateUser />} />
               </Route>

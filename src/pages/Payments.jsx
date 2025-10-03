@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, Edit2, Edit } from 'lucide-react';
+import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Building2, Calendar, Eye, Edit2, Edit, Trash2 } from 'lucide-react';
 import Button from '../components/Button';
 import FormInput from '../components/FormInput';
 import FormSelect from '../components/FormSelect';
@@ -251,6 +251,45 @@ const handleEditPaymentSubmit = async (e) => {
   }
 };
 
+// delete payment handler
+const handleDeletePayment = async (payment) => {
+  const confirmMessage = `Delete Payment?\n\n` +
+    `Payment: ${payment.paymentNo || 'N/A'}\n` +
+    `Amount: $${payment.amount.toLocaleString()}\n` +
+    `Type: ${payment.type === 'receive' ? 'Payment Received' : 'Payment Out'}\n\n` +
+    `This action cannot be undone.\n\n` +
+    `Continue?`;
+
+  if (window.confirm(confirmMessage)) {
+    try {
+      setLoading(true);
+
+      const customerId = payment.customerId?._id || payment.customerId;
+      const carId = payment.carId?._id || payment.carId;
+
+      await paymentsAPI.deleteWithBalanceAdjustment(
+        payment._id,
+        payment.amount,
+        customerId,
+        carId
+      );
+
+      showSuccess(
+        'Payment Deleted',
+        `Payment deleted successfully`
+      );
+
+      loadAllData();
+
+    } catch (error) {
+      console.error('❌ Error deleting payment:', error);
+      showError('Delete Failed', 'Failed to delete payment. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+};
+
 
   const validateReceiveForm = () => {
     if (!receiveFormData.customerId) {
@@ -259,10 +298,6 @@ const handleEditPaymentSubmit = async (e) => {
     }
     if (!receiveFormData.amount || parseFloat(receiveFormData.amount) <= 0) {
       showError('Validation Error', 'Please enter a valid amount');
-      return false;
-    }
-    if (!receiveFormData.paymentNo) {
-      showError('Validation Error', 'Please enter payment number');
       return false;
     }
     return true;
@@ -283,10 +318,6 @@ const handleEditPaymentSubmit = async (e) => {
     }
     if (!paymentOutFormData.amount || parseFloat(paymentOutFormData.amount) <= 0) {
       showError('Validation Error', 'Please enter a valid amount');
-      return false;
-    }
-    if (!paymentOutFormData.paymentNo) {
-      showError('Validation Error', 'Please enter payment number');
       return false;
     }
     return true;
@@ -566,17 +597,23 @@ const handleEditPaymentSubmit = async (e) => {
                     >
                       <Eye className="w-5 h-5" />
                     </button>
-<button
-  onClick={() => {
-    setEditPaymentData(payment); // xogtii payment
-    setShowEditPaymentModal(true);
-  }}
-  className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
-  title="Edit Payment"
->
-   <Edit className="w-5 text-red-500 h-5" />
-</button>
-
+                    <button
+                      onClick={() => {
+                        setEditPaymentData(payment);
+                        setShowEditPaymentModal(true);
+                      }}
+                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="Edit Payment"
+                    >
+                      <Edit className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeletePayment(payment)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Payment"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -623,8 +660,7 @@ const handleEditPaymentSubmit = async (e) => {
                 value={receiveFormData.paymentNo}
                 onChange={handleReceiveChange}
                 placeholder="e.g., PYN-001"
-                required
-                enabled
+                disabled
               />
 
               <FormInput
@@ -758,8 +794,7 @@ const handleEditPaymentSubmit = async (e) => {
                 value={paymentOutFormData.paymentNo}
                 onChange={handlePaymentOutChange}
                 placeholder="e.g., PYN-001"
-                required
-                enabled
+                disabled
               />
 
               <FormInput

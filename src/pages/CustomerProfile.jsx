@@ -38,8 +38,10 @@ const CustomerProfile = () => {
   });
   
   const [transactions, setTransactions] = useState([]);
+  const [cashTransactions, setCashTransactions] = useState([]);
   const [payments, setPayments] = useState([]);
   const [combinedHistory, setCombinedHistory] = useState([]);
+  const [allCustomers, setAllCustomers] = useState([]);
 
   // Load customer data and transactions from database
   useEffect(() => {
@@ -49,6 +51,20 @@ const CustomerProfile = () => {
       loadPayments();
     }
   }, [id]);
+
+  // Load all customers for dropdown
+  useEffect(() => {
+    loadAllCustomers();
+  }, []);
+
+  const loadAllCustomers = async () => {
+    try {
+      const response = await customersAPI.getAll();
+      setAllCustomers(response.data);
+    } catch (error) {
+      console.error('❌ Error loading all customers:', error);
+    }
+  };
 
   // Create combined history when transactions or payments change
   useEffect(() => {
@@ -74,17 +90,17 @@ const CustomerProfile = () => {
       // Load all invoices and filter customer transactions
       const response = await invoicesAPI.getAll();
       const allInvoices = response.data;
-      
+
       // Find transactions for this customer (only credit transactions)
       const customerTransactions = [];
-      
+      const customerCashTransactions = [];
+
       allInvoices.forEach(invoice => {
         invoice.items?.forEach(item => {
           const itemCustomerId = item.customerId?._id || item.customerId;
-          
-          // Only include credit transactions for customer balance
-          if (itemCustomerId === id && item.paymentMethod === 'credit') {
-            customerTransactions.push({
+
+          if (itemCustomerId === id) {
+            const transactionData = {
               id: `${invoice._id}-${item._id}`,
               type: 'transaction',
               invoiceNo: invoice.invoiceNo,
@@ -96,17 +112,26 @@ const CustomerProfile = () => {
               date: invoice.invoiceDate,
               description: item.description || '',
               paymentMethod: item.paymentMethod || 'credit'
-            });
+            };
+
+            if (item.paymentMethod === 'credit') {
+              customerTransactions.push(transactionData);
+            } else if (item.paymentMethod === 'cash') {
+              customerCashTransactions.push(transactionData);
+            }
           }
         });
       });
-      
+
       setTransactions(customerTransactions);
-      console.log('✅ Customer credit transactions loaded:', customerTransactions);
+      setCashTransactions(customerCashTransactions);
+      console.log('✅ Customer credit transactions loaded:', customerTransactions.length);
+      console.log('✅ Customer cash transactions loaded:', customerCashTransactions.length);
     } catch (error) {
       console.error('❌ Error loading transactions:', error);
       showError('Load Failed', 'Failed to load transaction data');
       setTransactions([]);
+      setCashTransactions([]);
     }
   };
 
@@ -152,7 +177,17 @@ const createCombinedHistory = () => {
                          transaction.carName.toLowerCase().includes(searchTerm.toLowerCase());
     const transactionDate = new Date(transaction.date);
     const matchesDateRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
-    
+
+    return matchesSearch && matchesDateRange;
+  });
+
+  const filteredCashTransactions = cashTransactions.filter(transaction => {
+    const matchesSearch = transaction.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         transaction.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         transaction.carName.toLowerCase().includes(searchTerm.toLowerCase());
+    const transactionDate = new Date(transaction.date);
+    const matchesDateRange = transactionDate >= dateRange.from && transactionDate <= dateRange.to;
+
     return matchesSearch && matchesDateRange;
   });
 
@@ -324,8 +359,33 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
       searchTerm,
       dateRange
     });
-    
-    
+  };
+
+  const handleClearFilter = () => {
+    setSearchTerm('');
+    setDateRange({
+      from: startOfMonth(new Date()),
+      to: endOfMonth(new Date())
+    });
+    console.log('Filters cleared - reset to current month');
+  };
+
+  const handleAllData = () => {
+    // Get earliest transaction date from all transactions and payments
+    const allDates = [
+      ...transactions.map(t => new Date(t.date)),
+      ...cashTransactions.map(t => new Date(t.date)),
+      ...payments.map(p => new Date(p.paymentDate))
+    ].filter(d => !isNaN(d.getTime()));
+
+    if (allDates.length > 0) {
+      const earliestDate = new Date(Math.min(...allDates));
+      setDateRange({
+        from: earliestDate,
+        to: dateRange.to
+      });
+      console.log('All Data filter applied - showing from first transaction to filter date');
+    }
   };
 
   const handleViewInvoice = (invoiceNo) => {
@@ -879,24 +939,62 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
 
       {/* Filters */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 no-print">
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between space-y-4 lg:space-y-0 lg:space-x-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-            <input
-              type="text"
-              placeholder="Search invoice, item, or payment..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        <div className="flex flex-col space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between space-y-4 lg:space-y-0 lg:space-x-6">
+            <div className="flex space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Customer</label>
+                <select
+                  value={id}
+                  onChange={(e) => window.location.href = `/customers/${e.target.value}`}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[200px]"
+                >
+                  {allCustomers.map(c => (
+                    <option key={c._id} value={c._id}>
+                      {c.customerName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search invoice, item, or payment..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <DateFilter
+              dateRange={dateRange}
+              onDateChange={setDateRange}
+              showApplyButton={true}
+              onApplyFilter={handleApplyFilter}
             />
           </div>
-          
-          <DateFilter 
-            dateRange={dateRange} 
-            onDateChange={setDateRange}
-            showApplyButton={true}
-            onApplyFilter={handleApplyFilter}
-          />
+
+          <div className="flex space-x-3">
+            <Button
+              onClick={handleClearFilter}
+              variant="outline"
+              size="sm"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Clear Filter
+            </Button>
+            <Button
+              onClick={handleAllData}
+              variant="outline"
+              size="sm"
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              All Data
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -954,6 +1052,23 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
                 </span>
               </div>
             </button>
+
+            <button
+              onClick={() => setActiveTab('cash')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'cash'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center">
+                <DollarSign className="w-4 h-4 mr-2" />
+                Cash History
+                <span className="ml-2 bg-gray-100 text-gray-600 py-1 px-2 rounded-full text-xs">
+                  {filteredCashTransactions.length}
+                </span>
+              </div>
+            </button>
           </nav>
         </div>
 
@@ -1001,6 +1116,22 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
                 columns={paymentColumns}
                 title="Customer Profile"
                 sectionName="Payment History"
+                profileData={{
+                  'Customer Name': customer.customerName,
+                  'Phone Number': customer.phoneNumber || 'N/A',
+                  'Current Balance': `$${finalBalance.toLocaleString()}`,
+                  'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
+                }}
+                dateRange={dateRange}
+              />
+            )}
+
+            {activeTab === 'cash' && (
+              <SectionPrintOptions
+                data={filteredCashTransactions}
+                columns={transactionColumns}
+                title="Customer Profile"
+                sectionName="Cash Transaction History"
                 profileData={{
                   'Customer Name': customer.customerName,
                   'Phone Number': customer.phoneNumber || 'N/A',
@@ -1069,10 +1200,25 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
               <p className="text-gray-600 mb-4">
                 Showing {filteredPayments.length} payments received from customer
               </p>
-              <Table 
-                data={filteredPayments} 
+              <Table
+                data={filteredPayments}
                 columns={paymentColumns}
                 emptyMessage="No payments found for the selected criteria."
+              />
+            </div>
+          )}
+
+          {/* Cash History Tab */}
+          {activeTab === 'cash' && (
+            <div className="cash-history-section">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Cash Transaction History</h2>
+              <p className="text-gray-600 mb-4">
+                Showing {filteredCashTransactions.length} cash transactions (credit transactions excluded)
+              </p>
+              <Table
+                data={filteredCashTransactions}
+                columns={transactionColumns}
+                emptyMessage="No cash transactions found for the selected criteria."
               />
             </div>
           )}
