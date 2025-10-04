@@ -154,6 +154,28 @@ async function initializeAdminUser() {
       console.log('✅ Admin user already exists');
     }
 
+    // Fix existing payment records with string employeeId
+    console.log('🔧 Checking for payment records to migrate...');
+    const paymentsToFix = await Payment.find({
+      employeeId: { $type: 'string' }
+    });
+
+    if (paymentsToFix.length > 0) {
+      console.log(`📝 Found ${paymentsToFix.length} payment records with string employeeId`);
+      for (const payment of paymentsToFix) {
+        try {
+          await Payment.findByIdAndUpdate(payment._id, {
+            employeeId: mongoose.Types.ObjectId(payment.employeeId)
+          });
+        } catch (err) {
+          console.log(`⚠️ Could not convert payment ${payment._id}, might be invalid ObjectId`);
+        }
+      }
+      console.log('✅ Payment records migrated to ObjectId format');
+    } else {
+      console.log('✅ No payment records need migration');
+    }
+
     console.log('🎉 Database initialization completed');
   } catch (error) {
     console.error('❌ Error initializing admin user:', error);
@@ -505,13 +527,15 @@ app.post('/api/employees/:id/add-balance', authenticateToken, async (req, res) =
     // Record transaction
     await Payment.create({
       type: 'balance_add',
-      employeeId: employeeId,
+      employeeId: mongoose.Types.ObjectId(employeeId),
       paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
       paymentDate: new Date(date),
       balanceAfter: newBalance
     });
+
+    console.log('✅ Payment record created for employee:', employeeId);
 
     res.json({
       success: true,
@@ -559,13 +583,15 @@ app.post('/api/employees/:id/deduct-balance', authenticateToken, async (req, res
     // Record transaction
     await Payment.create({
       type: 'balance_deduct',
-      employeeId: employeeId,
+      employeeId: mongoose.Types.ObjectId(employeeId),
       paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
       paymentDate: new Date(date),
       balanceAfter: newBalance
     });
+
+    console.log('✅ Payment record created for employee:', employeeId);
 
     res.json({
       success: true,
@@ -582,15 +608,33 @@ app.post('/api/employees/:id/deduct-balance', authenticateToken, async (req, res
 app.get('/api/employees/:id/payment-history', authenticateToken, async (req, res) => {
   try {
     const employeeId = req.params.id;
-    
+
+    console.log('🔍 Searching payments for employee:', employeeId);
+    console.log('Employee ID Type:', typeof employeeId);
+
+    // Try both string and ObjectId formats
     const payments = await Payment.find({
-      employeeId: employeeId,
+      $or: [
+        { employeeId: employeeId },
+        { employeeId: mongoose.Types.ObjectId(employeeId) }
+      ],
       type: { $in: ['balance_add', 'balance_deduct', 'payment_out'] }
     }).sort({ createdAt: -1 });
 
+    console.log('✅ Payments found:', payments.length);
+
+    // Also check ALL payments for this employee (debug)
+    const allPayments = await Payment.find({
+      $or: [
+        { employeeId: employeeId },
+        { employeeId: mongoose.Types.ObjectId(employeeId) }
+      ]
+    });
+    console.log('📊 Total payments for employee (all types):', allPayments.length);
+
     res.json(payments);
   } catch (error) {
-    console.error('Get payment history error:', error);
+    console.error('❌ Get payment history error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
