@@ -183,14 +183,14 @@ const EmployeeProfile = () => {
     setBalanceLoading(true);
 
     try {
-      const amount = parseFloat(balanceFormData.amount);
-      const currentBalance = employee.balance || 0;
-      const newBalance = currentBalance + amount;
+      // Call backend API to add balance and create payment record
+      const response = await api.post(`/employees/${id}/add-balance`, {
+        amount: balanceFormData.amount,
+        date: balanceFormData.date,
+        description: balanceFormData.description
+      });
 
-      // Update employee balance
-      await employeesAPI.update(id, { balance: newBalance });
-
-      showSuccess('Balance Added', `$${amount} has been added to ${employee.employeeName}'s balance`);
+      showSuccess('Balance Added', `$${balanceFormData.amount} has been added to ${employee.employeeName}'s balance`);
 
       // Reset form and close modal
       setBalanceFormData({
@@ -223,14 +223,14 @@ const EmployeeProfile = () => {
     setBalanceLoading(true);
 
     try {
-      const amount = parseFloat(balanceFormData.amount);
-      const currentBalance = employee.balance || 0;
-      const newBalance = Math.max(0, currentBalance - amount);
+      // Call backend API to deduct balance and create payment record
+      const response = await api.post(`/employees/${id}/deduct-balance`, {
+        amount: balanceFormData.amount,
+        date: balanceFormData.date,
+        description: balanceFormData.description
+      });
 
-      // Update employee balance
-      await employeesAPI.update(id, { balance: newBalance });
-
-      showSuccess('Balance Deducted', `$${amount} has been deducted from ${employee.employeeName}'s balance`);
+      showSuccess('Balance Deducted', `$${balanceFormData.amount} has been deducted from ${employee.employeeName}'s balance`);
 
       // Reset form and close modal
       setBalanceFormData({
