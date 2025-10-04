@@ -165,7 +165,7 @@ async function initializeAdminUser() {
       for (const payment of paymentsToFix) {
         try {
           await Payment.findByIdAndUpdate(payment._id, {
-            employeeId: mongoose.Types.ObjectId(payment.employeeId)
+            employeeId: new mongoose.Types.ObjectId(payment.employeeId)
           });
         } catch (err) {
           console.log(`⚠️ Could not convert payment ${payment._id}, might be invalid ObjectId`);
@@ -527,7 +527,7 @@ app.post('/api/employees/:id/add-balance', authenticateToken, async (req, res) =
     // Record transaction
     await Payment.create({
       type: 'balance_add',
-      employeeId: mongoose.Types.ObjectId(employeeId),
+      employeeId: new mongoose.Types.ObjectId(employeeId),
       paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
@@ -583,7 +583,7 @@ app.post('/api/employees/:id/deduct-balance', authenticateToken, async (req, res
     // Record transaction
     await Payment.create({
       type: 'balance_deduct',
-      employeeId: mongoose.Types.ObjectId(employeeId),
+      employeeId: new mongoose.Types.ObjectId(employeeId),
       paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
@@ -616,7 +616,7 @@ app.get('/api/employees/:id/payment-history', authenticateToken, async (req, res
     const payments = await Payment.find({
       $or: [
         { employeeId: employeeId },
-        { employeeId: mongoose.Types.ObjectId(employeeId) }
+        { employeeId: new mongoose.Types.ObjectId(employeeId) }
       ],
       type: { $in: ['balance_add', 'balance_deduct', 'payment_out'] }
     }).sort({ createdAt: -1 });
@@ -627,7 +627,7 @@ app.get('/api/employees/:id/payment-history', authenticateToken, async (req, res
     const allPayments = await Payment.find({
       $or: [
         { employeeId: employeeId },
-        { employeeId: mongoose.Types.ObjectId(employeeId) }
+        { employeeId: new mongoose.Types.ObjectId(employeeId) }
       ]
     });
     console.log('📊 Total payments for employee (all types):', allPayments.length);
