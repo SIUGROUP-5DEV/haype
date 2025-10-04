@@ -498,10 +498,15 @@ app.post('/api/employees/:id/add-balance', authenticateToken, async (req, res) =
       updatedAt: new Date()
     });
 
+    // Generate unique payment number for balance transaction
+    const paymentCount = await Payment.countDocuments();
+    const paymentNo = `BAL-${String(paymentCount + 1).padStart(4, '0')}`;
+
     // Record transaction
     await Payment.create({
       type: 'balance_add',
       employeeId: employeeId,
+      paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
       paymentDate: new Date(date),
@@ -547,10 +552,15 @@ app.post('/api/employees/:id/deduct-balance', authenticateToken, async (req, res
       updatedAt: new Date()
     });
 
+    // Generate unique payment number for balance transaction
+    const paymentCount = await Payment.countDocuments();
+    const paymentNo = `BAL-${String(paymentCount + 1).padStart(4, '0')}`;
+
     // Record transaction
     await Payment.create({
       type: 'balance_deduct',
       employeeId: employeeId,
+      paymentNo: paymentNo,
       amount: parseFloat(amount),
       description: description,
       paymentDate: new Date(date),
@@ -888,10 +898,17 @@ app.post('/api/payments/receive', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Customer, amount, and payment date are required' });
     }
 
+    // Generate payment number if not provided
+    let finalPaymentNo = paymentNo;
+    if (!finalPaymentNo) {
+      const paymentCount = await Payment.countDocuments();
+      finalPaymentNo = `PYN-${String(paymentCount + 1).padStart(4, '0')}`;
+    }
+
     const newPayment = await Payment.create({
       type: 'receive',
       customerId,
-      paymentNo,
+      paymentNo: finalPaymentNo,
       amount,
       description,
       paymentDate
@@ -924,9 +941,16 @@ app.post('/api/payments/payment-out', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Account type, recipient, amount, and payment date are required' });
     }
 
+    // Generate payment number if not provided
+    let finalPaymentNo = paymentNo;
+    if (!finalPaymentNo) {
+      const paymentCount = await Payment.countDocuments();
+      finalPaymentNo = `PYN-${String(paymentCount + 1).padStart(4, '0')}`;
+    }
+
     const paymentData = {
       type: 'payment_out',
-      paymentNo: paymentNo || null,
+      paymentNo: finalPaymentNo,
       amount,
       description,
       paymentDate,
