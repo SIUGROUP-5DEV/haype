@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter, Trash2 } from 'lucide-react';
+import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter, Trash2, CreditCard } from 'lucide-react';
 import Button from '../components/Button';
 import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 import SectionPrintOptions from '../components/SectionPrintOptions';
+import InvoiceModal from '../components/InvoiceModal';
 
 const CustomerReports = () => {
   const { showError, showSuccess } = useToast();
@@ -21,7 +22,12 @@ const CustomerReports = () => {
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState([]);
   const [paymentsData, setPaymentsData] = useState([]);
-  
+
+  // Invoice modal state
+  const [showModal, setShowModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [modalMode, setModalMode] = useState('view');
+
   // Data from database
   const [customers, setCustomers] = useState([]);
 
@@ -352,10 +358,66 @@ const CustomerReports = () => {
       alert('Please select a customer first');
       return;
     }
-    
+
     loadReportData();
     const customerName = customers.find(c => c._id === selectedCustomer)?.customerName || '';
     alert(`Filter applied for ${customerName} from ${format(dateRange.from, 'MMM dd')} to ${format(dateRange.to, 'MMM dd, yyyy')}`);
+  };
+
+  const handleAllData = async () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer first');
+      return;
+    }
+
+    try {
+      // Load all invoices and payments to find earliest date
+      const invoicesResponse = await invoicesAPI.getAll();
+      const paymentsResponse = await paymentsAPI.getAll();
+
+      const allInvoices = invoicesResponse.data;
+      const allPayments = paymentsResponse.data;
+
+      // Filter transactions for selected customer
+      const customerTransactions = [];
+      allInvoices.forEach(invoice => {
+        invoice.items?.forEach(item => {
+          const itemCustomerId = item.customerId?._id || item.customerId;
+          if (itemCustomerId === selectedCustomer && item.paymentMethod === 'credit') {
+            customerTransactions.push(new Date(invoice.invoiceDate));
+          }
+        });
+      });
+
+      // Filter payments for selected customer
+      const customerPayments = allPayments
+        .filter(p => (p.customerId?._id === selectedCustomer || p.customerId === selectedCustomer))
+        .map(p => new Date(p.paymentDate));
+
+      // Combine all dates
+      const allDates = [...customerTransactions, ...customerPayments].filter(d => !isNaN(d.getTime()));
+
+      if (allDates.length > 0) {
+        const earliestDate = new Date(Math.min(...allDates));
+        setDateRange({
+          from: earliestDate,
+          to: new Date()
+        });
+
+        // Reload data with new date range
+        setTimeout(() => {
+          loadReportData();
+          loadPaymentsData();
+        }, 100);
+
+        showSuccess('All Data Loaded', `Showing all data from ${format(earliestDate, 'MMM dd, yyyy')} to today`);
+      } else {
+        showError('No Data', 'No transactions found for this customer');
+      }
+    } catch (error) {
+      console.error('Error loading all data:', error);
+      showError('Error', 'Failed to load all data');
+    }
   };
 
   const toggleItemExpansion = (itemName) => {
@@ -365,14 +427,58 @@ const CustomerReports = () => {
     }));
   };
 
-  const handleViewInvoice = (invoiceNo) => {
-    console.log('View invoice:', invoiceNo);
-    alert(`Opening invoice ${invoiceNo} for viewing`);
+  const handleViewInvoice = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('view');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
   };
 
-  const handleEditInvoice = (invoiceNo) => {
-    console.log('Edit invoice:', invoiceNo);
-    alert(`Opening invoice ${invoiceNo} for editing`);
+  const handleEditInvoice = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('edit');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
+  };
+
+  const handleMakePayment = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('payment');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
   };
 
   const handleDeletePayment = async (payment) => {
@@ -495,16 +601,10 @@ const CustomerReports = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Quick Filter</label>
                 <button
-                  onClick={() => {
-                    setDateRange({
-                      from: new Date('2020-01-01'),
-                      to: new Date('2030-12-31')
-                    });
-                    if (selectedCustomer) loadReportData();
-                  }}
+                  onClick={handleAllData}
                   className="border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
                 >
-                  All Dates
+                  All Data
                 </button>
               </div>
               
@@ -726,6 +826,13 @@ const CustomerReports = () => {
                                     >
                                       <Edit className="w-4 h-4" />
                                     </button>
+                                    <button
+                                      onClick={() => handleMakePayment(transaction.invoiceNo)}
+                                      className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                      title="Make Payment"
+                                    >
+                                      <CreditCard className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -908,6 +1015,19 @@ const CustomerReports = () => {
           <p className="text-gray-600 mt-4">Loading report data...</p>
         </div>
       )}
+
+      {/* Invoice Modal */}
+      <InvoiceModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedInvoice(null);
+          loadReportData();
+          loadPaymentsData();
+        }}
+        mode={modalMode}
+        invoice={selectedInvoice}
+      />
 
 <Footer/>
 
