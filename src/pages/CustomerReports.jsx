@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter, Trash2, CreditCard } from 'lucide-react';
+import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, CreditCard as Edit, Filter, Trash2, CreditCard } from 'lucide-react';
 import Button from '../components/Button';
 import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
