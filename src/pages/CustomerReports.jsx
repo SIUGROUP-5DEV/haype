@@ -46,10 +46,12 @@ const CustomerReports = () => {
     
     if (month) {
       // Set date range based on month parameter
-      const [year, monthNum] = month.split('-');
+      const parts = month.split('-');
+      const year = parts[0];
+      const monthNum = parts[1];
       const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
       const endDate = new Date(parseInt(year), parseInt(monthNum), 0);
-      
+
       setDateRange({
         from: startDate,
         to: endDate
