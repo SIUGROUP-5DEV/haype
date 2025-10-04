@@ -639,6 +639,108 @@ app.get('/api/employees/:id/payment-history', authenticateToken, async (req, res
   }
 });
 
+// Update payment record
+app.put('/api/payments/:id', authenticateToken, async (req, res) => {
+  try {
+    const { amount, date, description } = req.body;
+    const paymentId = req.params.id;
+
+    // Get the payment to update
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    // Get the employee
+    const employee = await Employee.findById(payment.employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Calculate balance adjustment
+    const oldAmount = payment.amount;
+    const newAmount = parseFloat(amount);
+    const amountDifference = newAmount - oldAmount;
+
+    // Update employee balance based on payment type
+    let newBalance = employee.balance;
+    if (payment.type === 'balance_add') {
+      newBalance = employee.balance + amountDifference;
+    } else if (payment.type === 'balance_deduct') {
+      newBalance = Math.max(0, employee.balance - amountDifference);
+    }
+
+    // Update employee balance
+    await Employee.findByIdAndUpdate(employee._id, { balance: newBalance });
+
+    // Update payment record
+    const updatedPayment = await Payment.findByIdAndUpdate(
+      paymentId,
+      {
+        amount: newAmount,
+        paymentDate: new Date(date),
+        description: description,
+        balanceAfter: newBalance
+      },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Payment updated successfully',
+      payment: updatedPayment,
+      newBalance: newBalance
+    });
+  } catch (error) {
+    console.error('Update payment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete payment record
+app.delete('/api/payments/:id', authenticateToken, async (req, res) => {
+  try {
+    const paymentId = req.params.id;
+
+    // Get the payment to delete
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    // Get the employee
+    const employee = await Employee.findById(payment.employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Reverse the balance change
+    let newBalance = employee.balance;
+    if (payment.type === 'balance_add') {
+      // Reverse the addition
+      newBalance = Math.max(0, employee.balance - payment.amount);
+    } else if (payment.type === 'balance_deduct') {
+      // Reverse the deduction
+      newBalance = employee.balance + payment.amount;
+    }
+
+    // Update employee balance
+    await Employee.findByIdAndUpdate(employee._id, { balance: newBalance });
+
+    // Delete the payment record
+    await Payment.findByIdAndDelete(paymentId);
+
+    res.json({
+      success: true,
+      message: 'Payment deleted successfully',
+      newBalance: newBalance
+    });
+  } catch (error) {
+    console.error('Delete payment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Items Routes
 app.get('/api/items', authenticateToken, async (req, res) => {
   try {
