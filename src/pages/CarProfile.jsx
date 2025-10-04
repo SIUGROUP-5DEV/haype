@@ -11,6 +11,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 import SectionPrintOptions from '../components/SectionPrintOptions';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 const CarProfile = () => {
   const { id } = useParams();
@@ -129,27 +130,26 @@ const CarProfile = () => {
   });
 
   const handlePrint = () => {
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    
+    // Calculate totals
+    const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0);
+    const totalPaymentsReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+    const totalPaymentLeft = transactions.reduce((sum, t) => sum + t.totalLeft, 0);
+    const amountLeft = totalRevenue - totalPaymentsReceived;
+
     // Prepare profile data
     const profileData = {
       'Car Name': car.carName,
       'Number Plate': car.numberPlate || 'N/A',
-      'Current Balance': `$${(car.balance || 0).toLocaleString()}`,
       'Driver': car.driverName || 'Not Assigned',
       'Kirishboy': car.kirishboyName || 'Not Assigned',
       'Status': car.status || 'Active'
     };
-    
-    // Prepare summary data
+
+    // Prepare summary data - Car specific format
     const summaryData = {
-      'Total Revenue': `$${transactions.reduce((sum, t) => sum + t.total, 0).toLocaleString()}`,
-      'Total Profit': `$${transactions.reduce((sum, t) => sum + t.totalProfit, 0).toLocaleString()}`,
-      'Amount Left': `$${transactions.reduce((sum, t) => sum + t.totalLeft, 0).toLocaleString()}`,
-      'Total Payments': `$${payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
-      
-      
+      'Total Revenue': `$${totalRevenue.toLocaleString()}`,
+      'Total Payment Left': `$${totalPaymentLeft.toLocaleString()}`,
+      'Amount Left': `$${amountLeft.toLocaleString()}`
     };
     
     // Combine all data for printing
@@ -263,16 +263,9 @@ const CarProfile = () => {
         </body>
       </html>
     `;
-    
-    // Write content to new window and print
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
-    // Wait for content to load then print
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
+
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `Car Profile - ${car.carName}`);
   };
 
   const handleApplyFilter = () => {

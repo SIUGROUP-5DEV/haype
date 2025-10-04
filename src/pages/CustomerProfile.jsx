@@ -12,6 +12,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 import SectionPrintOptions from '../components/SectionPrintOptions';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 const CustomerProfile = () => {
   const { id } = useParams();
@@ -219,9 +220,6 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
 });
 
   const handlePrint = () => {
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    
     // Prepare profile data
     const profileData = {
       'Customer Name': customer.customerName,
@@ -229,13 +227,12 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
       'Current Balance': `$${finalBalance.toLocaleString()}`,
       'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
     };
-    
-    // Prepare summary data
+
+    // Prepare summary data - Customer specific format
     const summaryData = {
       'Total Credited': `$${totalCredited.toLocaleString()}`,
-      'Total Payments': `$${totalPayments.toLocaleString()}`,
-      'Final Balance': `$${finalBalance.toLocaleString()}`,
-      'Database Balance': `$${(customer.balance || 0).toLocaleString()}`
+      'Total MKPYN Payments': `$${totalPayments.toLocaleString()}`,
+      'Final Balance': `$${finalBalance.toLocaleString()}`
     };
     
     // Generate the HTML content
@@ -342,16 +339,9 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
         </body>
       </html>
     `;
-    
-    // Write content to new window and print
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
-    // Wait for content to load then print
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
+
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `Customer Profile - ${customer.customerName}`);
   };
 
   const handleApplyFilter = () => {

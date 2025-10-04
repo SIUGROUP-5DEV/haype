@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, CreditCard as Edit, Filter, Trash2, CreditCard } from 'lucide-react';
+import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, Edit, Filter, Trash2, CreditCard } from 'lucide-react';
 import Button from '../components/Button';
 import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
@@ -9,6 +9,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 import SectionPrintOptions from '../components/SectionPrintOptions';
 import InvoiceModal from '../components/InvoiceModal';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 const CustomerReports = () => {
   const { showError, showSuccess } = useToast();
@@ -181,10 +182,7 @@ const CustomerReports = () => {
       showError('Print Error', 'Please select a customer and load data before printing');
       return;
     }
-    
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
-    
+
     // Prepare customer profile data
     const profileData = {
       'Customer Name': selectedCustomerName,
@@ -343,16 +341,9 @@ const CustomerReports = () => {
         </body>
       </html>
     `;
-    
-    // Write content to new window and print
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
-    // Wait for content to load then print
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
+
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `Customer Report - ${selectedCustomerName}`);
   };
 
   const handleApplyFilter = () => {

@@ -9,6 +9,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import Footer from '../components/Footer';
 import InvoiceModal from '../components/InvoiceModal';
 import SectionPrintOptions from '../components/SectionPrintOptions';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 const CarReports = () => {
   const { showError, showSuccess } = useToast();

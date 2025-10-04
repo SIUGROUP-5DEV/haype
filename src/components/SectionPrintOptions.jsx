@@ -4,7 +4,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
-import logo from '../assets/sitelogo.png'
+import logo from '../assets/sitelogo.png';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 
 
@@ -70,14 +71,12 @@ const SectionPrintOptions = ({
 
   const handleSectionPrint = () => {
     const balanceSummary = calculateBalanceSummary();
-    
+
     // Filter out Actions and Profit columns for printing
-    const printColumns = columns.filter(col => 
-      !col.header.toLowerCase().includes('action') && 
+    const printColumns = columns.filter(col =>
+      !col.header.toLowerCase().includes('action') &&
       !col.header.toLowerCase().includes('profit')
     );
-    
-    const printWindow = window.open('', '_blank');
     
     // Generate HTML for printing with company branding
     const htmlContent = `
@@ -381,13 +380,8 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
       </html>
     `;
     
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    
-    printWindow.onload = () => {
-      printWindow.print();
-      printWindow.close();
-    };
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `${title} - ${sectionName}`);
   };
 
   const handleSectionExcel = () => {
