@@ -17,7 +17,7 @@ const EmployeeProfile = () => {
   const { showError, showSuccess } = useToast();
   const [employee, setEmployee] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('transactions');
+  const [activeTab, setActiveTab] = useState('payments');
   const [dateRange, setDateRange] = useState({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date())
@@ -506,31 +506,17 @@ const EmployeeProfile = () => {
 
         {/* Tab Content */}
         <div className="p-6">
-          {activeTab === 'transactions' ? (
-             <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
-              <p className="text-gray-600 mb-4">
-                Showing {filteredPaymentHistory.length} payment records
-              </p>
-              <Table 
-                data={filteredPaymentHistory} 
-                columns={paymentHistoryColumns}
-                emptyMessage="No payment history found. Use the Add/Deduct Balance buttons to manage employee balance."
-              />
-            </div>
-          ) : (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
-              <p className="text-gray-600 mb-4">
-                Showing {filteredPaymentHistory.length} payment records
-              </p>
-              <Table 
-                data={filteredPaymentHistory} 
-                columns={paymentHistoryColumns}
-                emptyMessage="No payment history found. Use the Add/Deduct Balance buttons to manage employee balance."
-              />
-            </div>
-          )}
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment History</h2>
+            <p className="text-gray-600 mb-4">
+              Showing {filteredPaymentHistory.length} payment records
+            </p>
+            <Table
+              data={filteredPaymentHistory}
+              columns={paymentHistoryColumns}
+              emptyMessage="No payment history found. Use the Add/Deduct Balance buttons to manage employee balance."
+            />
+          </div>
         </div>
       </div>
 
