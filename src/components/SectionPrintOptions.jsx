@@ -363,7 +363,7 @@ if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('d
                   <span style="font-size: 16px; font-weight: bold; color: #059669;">$${balanceSummary.totalAmount.toLocaleString()}</span>
                 </div>
                 <div style="margin-bottom: 8px;">
-                  <span style="font-size: 12px; color: #6b7280;">Total Amount Left:</span><br>
+                  <span style="font-size: 12px; color: #6b7280;">Total MKPYN Payments:</span><br>
                   <span style="font-size: 16px; font-weight: bold; color: #dc2626;">$${balanceSummary.totalPayments.toLocaleString()}</span>
                 </div>
                 <div style="border-top: 1px solid #bfdbfe; padding-top: 8px;">

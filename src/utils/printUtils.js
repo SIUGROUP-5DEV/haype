@@ -3,56 +3,56 @@ export const isMobileDevice = () => {
 };
 
 export const handlePrintContent = (htmlContent, title = 'Print') => {
-  const isMobile = isMobileDevice();
+  // Try popup window first (works on most devices)
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
 
-  if (isMobile) {
-    // Mobile: Use direct print with better compatibility
-    const printContainer = document.createElement('div');
-    printContainer.innerHTML = htmlContent;
-    printContainer.style.display = 'none';
-    document.body.appendChild(printContainer);
+  if (printWindow) {
+    // Desktop and most mobile browsers
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
 
-    // Apply print styles
-    const style = document.createElement('style');
-    style.textContent = `
-      @media print {
-        body > *:not(.print-container) {
-          display: none !important;
-        }
-        .print-container {
-          display: block !important;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-    printContainer.className = 'print-container';
+    // Wait for images and content to load
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
 
-    // Trigger print
-    window.print();
-
-    // Cleanup after print
-    setTimeout(() => {
-      document.body.removeChild(printContainer);
-      document.head.removeChild(style);
-    }, 1000);
-  } else {
-    // Desktop: Use popup window
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      printWindow.focus();
-
-      // Wait for content to load then print
-      printWindow.onload = () => {
+        // Close after print dialog is dismissed (give user time)
         setTimeout(() => {
-          printWindow.print();
           printWindow.close();
-        }, 250);
-      };
-    } else {
-      alert('Please allow popups to print');
-    }
+        }, 100);
+      }, 500);
+    };
+  } else {
+    // Fallback for browsers that block popups
+    // Create iframe for printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+    iframeDoc.write(htmlContent);
+    iframeDoc.close();
+
+    // Wait for content to load
+    iframe.onload = () => {
+      setTimeout(() => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+
+        // Remove iframe after print
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      }, 500);
+    };
   }
 };
 
