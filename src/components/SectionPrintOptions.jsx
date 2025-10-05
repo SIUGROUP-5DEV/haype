@@ -20,18 +20,38 @@ const SectionPrintOptions = ({
 }) => {
   // Calculate balance summary for the current data
   const calculateBalanceSummary = () => {
-    const totalAmount = data.reduce((sum, row) => {
-      const amount = row.total || row.amount || 0;
-      return sum + amount;
-    }, 0);
-    
-    const totalPayments = data.reduce((sum, row) => {
-      const left = row.totalPayments || row.leftAmount || 0;
-      return sum + left;
-    }, 0);
-    
+    // Check if data contains transactions or payments
+    const hasTransactions = data.some(row => row.total !== undefined || row.invoiceNo !== undefined);
+    const hasPayments = data.some(row => row.amount !== undefined && row.paymentDate !== undefined);
+
+    let totalAmount = 0;
+    let totalPayments = 0;
+
+    if (sectionName.includes('Payment')) {
+      // For payment sections, totalPayments is sum of payment amounts
+      totalPayments = data.reduce((sum, row) => sum + (row.amount || 0), 0);
+      totalAmount = 0; // No transaction amount in payment-only view
+    } else if (sectionName.includes('Transaction') || sectionName.includes('Cash')) {
+      // For transaction sections, totalAmount is sum of transaction totals
+      totalAmount = data.reduce((sum, row) => sum + (row.total || 0), 0);
+      totalPayments = 0; // No payments in transaction-only view
+    } else if (sectionName.includes('Combined')) {
+      // For combined view, separate transactions and payments
+      totalAmount = data
+        .filter(row => row.type === 'transaction')
+        .reduce((sum, row) => sum + (row.total || 0), 0);
+
+      totalPayments = data
+        .filter(row => row.type === 'payment')
+        .reduce((sum, row) => sum + (row.amount || 0), 0);
+    } else {
+      // Fallback: try to determine from data structure
+      totalAmount = data.reduce((sum, row) => sum + (row.total || 0), 0);
+      totalPayments = data.reduce((sum, row) => sum + (row.amount || 0), 0);
+    }
+
     const finalBalance = totalAmount - totalPayments;
-    
+
     return { totalAmount, totalPayments, finalBalance };
   };
 
