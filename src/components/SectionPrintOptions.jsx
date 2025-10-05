@@ -327,13 +327,38 @@ const SectionPrintOptions = ({
                   <tr>
                     ${printColumns.map(col => {
                       let value = row[col.accessor];
-                      
+
+                      // Special handling for combined history
+                      if (col.header === 'Date' && !value) {
+                        value = row.paymentDate || row.date;
+                      }
+                      if (col.header === 'Reference' && !value) {
+                        value = row.paymentNo || row.invoiceNo;
+                      }
+                      if (col.header === 'Type') {
+                        value = row.type === 'transaction' ? 'Credit Purchase' : 'MKPYN Payment';
+                      }
+                      if (col.header === 'Description') {
+                        if (row.type === 'transaction') {
+                          value = row.itemName && row.quantity && row.price
+                            ? row.itemName + ' (' + row.quantity + ' units @ $' + row.price + ')'
+                            : row.description || value || '';
+                        } else {
+                          value = row.description || 'Payment received';
+                        }
+                      }
+                      if (col.header === 'Amount') {
+                        const amount = row.type === 'transaction' ? row.total : row.amount;
+                        const sign = row.type === 'transaction' ? '+' : '-';
+                        value = sign + '$' + (amount || 0).toLocaleString();
+                      }
+
                       // Handle nested objects
                       if (col.accessor && col.accessor.includes('.')) {
                         const keys = col.accessor.split('.');
                         value = keys.reduce((obj, key) => obj?.[key], row);
                       }
-                      
+
                       // Format special values
                       if (typeof value === 'object' && value !== null) {
                         if (value.customerName) value = value.customerName;
@@ -342,30 +367,19 @@ const SectionPrintOptions = ({
                         else if (value.employeeName) value = value.employeeName;
                         else value = JSON.stringify(value);
                       }
-                      
+
                       // Format dates
-                   
+                      if (value && !isNaN(Date.parse(value)) && (col.accessor.toLowerCase().includes('date') || col.header.toLowerCase().includes('date'))) {
+                        value = format(new Date(value), 'MMM dd, yyyy');
+                      }
 
-// Handle nested objects
-if (col.accessor && col.accessor.includes('.')) {
-  const keys = col.accessor.split('.');
-  value = keys.reduce((obj, key) => obj?.[key], row);
-}
-
-// Format dates (waxaad ka dhigtaa mid guud)
-if (value && !isNaN(Date.parse(value)) && col.accessor.toLowerCase().includes('date')) {
-  value = format(new Date(value), 'dd-MM-yyyy');
-}
-
-
-                      
-                      // Format currency
-                      if (col.accessor.includes('balance') || col.accessor.includes('amount') || col.accessor.includes('total') || col.accessor.includes('price')) {
+                      // Format currency (if not already formatted)
+                      if (!value?.toString().includes('$') && (col.accessor.includes('balance') || col.accessor.includes('amount') || col.accessor.includes('total') || col.accessor.includes('price'))) {
                         if (typeof value === 'number') {
                           value = `$${value.toLocaleString()}`;
                         }
                       }
-                      
+
                       return `<td>${value || ''}</td>`;
                     }).join('')}
                   </tr>

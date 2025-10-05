@@ -1175,11 +1175,30 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
               <p className="text-gray-600 mb-4">
                 Showing {filteredTransactions.length} credit transactions (cash transactions excluded)
               </p>
-              <Table 
-                data={filteredTransactions} 
+              <Table
+                data={filteredTransactions}
                 columns={transactionColumns}
                 emptyMessage="No credit transactions found for the selected criteria."
               />
+
+              {/* Balance Summary - Only shows in print mode */}
+              <div className="hidden print:block mt-6 bg-gray-100 border border-gray-400 rounded-lg p-6 summary-section page-break-avoid">
+                <h3 className="text-lg font-semibold text-black mb-4">Balance Summary</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-lg text-center border border-gray-300">
+                    <p className="text-sm text-black">Total Credited</p>
+                    <p className="text-xl font-bold text-black">${totalCredited.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg text-center border border-gray-300">
+                    <p className="text-sm text-black">Total MKPYN Payments</p>
+                    <p className="text-xl font-bold text-black">${totalPayments.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg text-center border border-gray-300">
+                    <p className="text-sm text-black">Final Balance</p>
+                    <p className="text-xl font-bold text-black">${finalBalance.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
