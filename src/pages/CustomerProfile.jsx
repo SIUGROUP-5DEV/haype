@@ -1080,10 +1080,15 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
                   'Total Credit Transactions': filteredTransactions.length,
                   'Total Payments': filteredPayments.length
                 }}
+                balanceSummary={{
+                  totalAmount: totalCredited,
+                  totalPayments: totalPayments,
+                  finalBalance: finalBalance
+                }}
                 dateRange={dateRange}
               />
             )}
-            
+
             {activeTab === 'transactions' && (
               <SectionPrintOptions
                 data={filteredTransactions}
@@ -1096,10 +1101,15 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
                   'Current Balance': `$${finalBalance.toLocaleString()}`,
                   'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
                 }}
+                balanceSummary={{
+                  totalAmount: totalCredited,
+                  totalPayments: totalPayments,
+                  finalBalance: finalBalance
+                }}
                 dateRange={dateRange}
               />
             )}
-            
+
             {activeTab === 'payments' && (
               <SectionPrintOptions
                 data={filteredPayments}
@@ -1111,6 +1121,11 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
                   'Phone Number': customer.phoneNumber || 'N/A',
                   'Current Balance': `$${finalBalance.toLocaleString()}`,
                   'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
+                }}
+                balanceSummary={{
+                  totalAmount: totalCredited,
+                  totalPayments: totalPayments,
+                  finalBalance: finalBalance
                 }}
                 dateRange={dateRange}
               />
@@ -1127,6 +1142,11 @@ const filteredCombinedHistory = combinedHistory.filter(item => {
                   'Phone Number': customer.phoneNumber || 'N/A',
                   'Current Balance': `$${finalBalance.toLocaleString()}`,
                   'Customer Type': (customer.balance || 0) === 0 ? 'Cash Customer' : 'Credit Customer'
+                }}
+                balanceSummary={{
+                  totalAmount: totalCredited,
+                  totalPayments: totalPayments,
+                  finalBalance: finalBalance
                 }}
                 dateRange={dateRange}
               />

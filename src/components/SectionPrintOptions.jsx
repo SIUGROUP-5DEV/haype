@@ -9,17 +9,24 @@ import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
 
 
 
-const SectionPrintOptions = ({ 
-  data, 
-  columns, 
-  title, 
+const SectionPrintOptions = ({
+  data,
+  columns,
+  title,
   sectionName,
   profileData = null,
   dateRange = null,
+  balanceSummary = null,
   className = ""
 }) => {
   // Calculate balance summary for the current data
   const calculateBalanceSummary = () => {
+    // If balanceSummary is passed as prop, use it (for accurate totals from parent)
+    if (balanceSummary) {
+      return balanceSummary;
+    }
+
+    // Otherwise calculate from current data
     // Check if data contains transactions or payments
     const hasTransactions = data.some(row => row.total !== undefined || row.invoiceNo !== undefined);
     const hasPayments = data.some(row => row.amount !== undefined && row.paymentDate !== undefined);
