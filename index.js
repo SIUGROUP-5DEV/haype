@@ -612,25 +612,38 @@ app.get('/api/employees/:id/payment-history', authenticateToken, async (req, res
     console.log('🔍 Searching payments for employee:', employeeId);
     console.log('Employee ID Type:', typeof employeeId);
 
-    // Try both string and ObjectId formats
-    const payments = await Payment.find({
-      $or: [
-        { employeeId: employeeId },
-        { employeeId: new mongoose.Types.ObjectId(employeeId) }
-      ],
-      type: { $in: ['balance_add', 'balance_deduct', 'payment_out'] }
-    }).sort({ createdAt: -1 });
+    // Verify employee exists first
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      console.log('❌ Employee not found:', employeeId);
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Try both string and ObjectId formats for maximum compatibility
+    let payments;
+    try {
+      payments = await Payment.find({
+        employeeId: new mongoose.Types.ObjectId(employeeId),
+        type: { $in: ['balance_add', 'balance_deduct'] }
+      }).sort({ paymentDate: -1, createdAt: -1 });
+    } catch (err) {
+      // Fallback if ObjectId conversion fails
+      console.log('⚠️ ObjectId conversion failed, trying string match');
+      payments = await Payment.find({
+        employeeId: employeeId,
+        type: { $in: ['balance_add', 'balance_deduct'] }
+      }).sort({ paymentDate: -1, createdAt: -1 });
+    }
 
     console.log('✅ Payments found:', payments.length);
-
-    // Also check ALL payments for this employee (debug)
-    const allPayments = await Payment.find({
-      $or: [
-        { employeeId: employeeId },
-        { employeeId: new mongoose.Types.ObjectId(employeeId) }
-      ]
-    });
-    console.log('📊 Total payments for employee (all types):', allPayments.length);
+    if (payments.length > 0) {
+      console.log('📊 Sample payment:', {
+        type: payments[0].type,
+        amount: payments[0].amount,
+        date: payments[0].paymentDate,
+        employeeId: payments[0].employeeId
+      });
+    }
 
     res.json(payments);
   } catch (error) {
