@@ -697,50 +697,6 @@ app.put('/api/payments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete payment record
-app.delete('/api/payments/:id', authenticateToken, async (req, res) => {
-  try {
-    const paymentId = req.params.id;
-
-    // Get the payment to delete
-    const payment = await Payment.findById(paymentId);
-    if (!payment) {
-      return res.status(404).json({ error: 'Payment not found' });
-    }
-
-    // Get the employee
-    const employee = await Employee.findById(payment.employeeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    // Reverse the balance change
-    let newBalance = employee.balance;
-    if (payment.type === 'balance_add') {
-      // Reverse the addition
-      newBalance = Math.max(0, employee.balance - payment.amount);
-    } else if (payment.type === 'balance_deduct') {
-      // Reverse the deduction
-      newBalance = employee.balance + payment.amount;
-    }
-
-    // Update employee balance
-    await Employee.findByIdAndUpdate(employee._id, { balance: newBalance });
-
-    // Delete the payment record
-    await Payment.findByIdAndDelete(paymentId);
-
-    res.json({
-      success: true,
-      message: 'Payment deleted successfully',
-      newBalance: newBalance
-    });
-  } catch (error) {
-    console.error('Delete payment error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // Items Routes
 app.get('/api/items', authenticateToken, async (req, res) => {
   try {
@@ -1223,8 +1179,8 @@ app.put('/api/payments/:id', async (req, res) => {
   }
 });
 
-// DELETE PAYMENT - NEW ROUTE
-app.delete('/api/payments/:id', async (req, res) => {
+// DELETE PAYMENT - Handles all payment types (receive, payment_out, employee payments)
+app.delete('/api/payments/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1246,7 +1202,7 @@ app.delete('/api/payments/:id', async (req, res) => {
       carId: payment.carId?._id
     });
 
-    // Reverse balance changes before deletion
+    // Reverse balance changes before deletion based on payment type
     if (payment.type === 'receive' && payment.customerId) {
       // For payment received: add back to customer balance (increase debt)
       const customer = await Customer.findById(payment.customerId._id);
@@ -1266,6 +1222,24 @@ app.delete('/api/payments/:id', async (req, res) => {
         car.left = newLeft;
         await car.save();
         console.log(`✅ Car ${car.carName} left amount reduced: -$${payment.amount} = $${newLeft}`);
+      }
+    }
+
+    // Handle employee payment reversals (balance_add, balance_deduct)
+    if ((payment.type === 'balance_add' || payment.type === 'balance_deduct') && payment.employeeId) {
+      const employee = await Employee.findById(payment.employeeId);
+      if (employee) {
+        let newBalance = employee.balance;
+        if (payment.type === 'balance_add') {
+          // Reverse the addition
+          newBalance = Math.max(0, employee.balance - payment.amount);
+        } else if (payment.type === 'balance_deduct') {
+          // Reverse the deduction
+          newBalance = employee.balance + payment.amount;
+        }
+        employee.balance = newBalance;
+        await employee.save();
+        console.log(`✅ Employee balance reversed: ${payment.type === 'balance_add' ? '-' : '+'}$${payment.amount} = $${newBalance}`);
       }
     }
 
