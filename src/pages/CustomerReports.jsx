@@ -1,0 +1,1079 @@
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Building2, Calendar, Printer, User, ChevronDown, ChevronRight, Eye, CreditCard as Edit, Filter, Trash2, CreditCard } from 'lucide-react';
+import Button from '../components/Button';
+import { customersAPI, invoicesAPI, paymentsAPI } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import Footer from '../components/Footer';
+import SectionPrintOptions from '../components/SectionPrintOptions';
+import InvoiceModal from '../components/InvoiceModal';
+import { handlePrintContent, generatePrintStyles } from '../utils/printUtils';
+
+const CustomerReports = () => {
+  const { showError, showSuccess } = useToast();
+  const [searchParams] = useSearchParams();
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [dateRange, setDateRange] = useState({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  const [expandedItems, setExpandedItems] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [reportData, setReportData] = useState([]);
+  const [paymentsData, setPaymentsData] = useState([]);
+
+  // Invoice modal state
+  const [showModal, setShowModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [modalMode, setModalMode] = useState('view');
+
+  // Data from database
+  const [customers, setCustomers] = useState([]);
+
+  // Load data from database
+  useEffect(() => {
+    loadCustomers();
+    
+    // Check for URL parameters from Account Management
+    const customerId = searchParams.get('customerId');
+    const month = searchParams.get('month');
+    const customerName = searchParams.get('customerName');
+    
+    if (customerId) {
+      setSelectedCustomer(customerId);
+    }
+    
+    if (month) {
+      // Set date range based on month parameter
+      const parts = month.split('-');
+      const year = parts[0];
+      const monthNum = parts[1];
+      const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+      const endDate = new Date(parseInt(year), parseInt(monthNum), 0);
+
+      setDateRange({
+        from: startDate,
+        to: endDate
+      });
+    }
+  }, []);
+
+  // Load report data when customer or date range changes
+  useEffect(() => {
+    if (selectedCustomer) {
+      loadReportData();
+      loadPaymentsData();
+    }
+  }, [selectedCustomer, dateRange]);
+
+  const loadCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await customersAPI.getAll();
+      setCustomers(response.data);
+      console.log('✅ Customers loaded for reports:', response.data);
+    } catch (error) {
+      console.error('❌ Error loading customers:', error);
+      showError('Load Failed', 'Failed to load customers');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadReportData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load all invoices and filter for selected customer and date range
+      const response = await invoicesAPI.getAll();
+      const allInvoices = response.data;
+      
+      console.log('📊 Loading report for customer:', selectedCustomer);
+      console.log('📊 Date range:', dateRange);
+      console.log('📊 All invoices:', allInvoices.length);
+      
+      // Filter invoices by date range
+      const filteredInvoices = allInvoices.filter(invoice => {
+        const invoiceDate = new Date(invoice.invoiceDate);
+        return invoiceDate >= dateRange.from && invoiceDate <= dateRange.to;
+      });
+      
+      console.log('📊 Filtered invoices by date:', filteredInvoices.length);
+      
+      // Group transactions by item for the selected customer
+      const itemGroups = {};
+      
+      filteredInvoices.forEach(invoice => {
+        invoice.items?.forEach(item => {
+          // Check both populated and non-populated customer references
+          const itemCustomerId = item.customerId?._id || item.customerId;
+          
+          // Only include credit transactions in customer reports
+          if (itemCustomerId === selectedCustomer && item.paymentMethod === 'credit') {
+            const itemName = item.itemId?.itemName || item.itemName || 'Unknown Item';
+            
+            if (!itemGroups[itemName]) {
+              itemGroups[itemName] = {
+                itemName,
+                transactions: [],
+                totalQuantity: 0,
+                unitPrice: item.price || 0,
+                totalValue: 0
+              };
+            }
+            
+            itemGroups[itemName].transactions.push({
+              date: invoice.invoiceDate,
+              invoiceNo: invoice.invoiceNo,
+              carName: invoice.carId?.carName || 'Unknown Car',
+              quantity: item.quantity || 0,
+              price: item.price || 0,
+              total: item.total || 0,
+              description: item.description || '',
+              paymentMethod: item.paymentMethod || 'cash'
+            });
+            
+            itemGroups[itemName].totalQuantity += item.quantity || 0;
+            itemGroups[itemName].totalValue += item.total || 0;
+          }
+        });
+      });
+      
+      // Convert to array and sort by total value
+      const reportArray = Object.values(itemGroups).sort((a, b) => b.totalValue - a.totalValue);
+      setReportData(reportArray);
+      
+      console.log('✅ Report data loaded:', reportArray);
+      console.log('📊 Customer transactions found:', reportArray.reduce((sum, item) => sum + item.transactions.length, 0));
+    } catch (error) {
+      console.error('❌ Error loading report data:', error);
+      showError('Load Failed', 'Failed to load report data');
+      setReportData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPaymentsData = async () => {
+    try {
+      // Load payments for selected customer
+      const response = await paymentsAPI.getAll();
+      const allPayments = response.data;
+      
+      // Filter payments by customer and date range
+      const customerPayments = allPayments.filter(payment => {
+        const customerMatch = payment.customerId?._id === selectedCustomer || payment.customerId === selectedCustomer;
+        const paymentDate = new Date(payment.paymentDate);
+        const dateMatch = paymentDate >= dateRange.from && paymentDate <= dateRange.to;
+        return customerMatch && dateMatch;
+      });
+      
+      setPaymentsData(customerPayments);
+      console.log('✅ Customer payments loaded:', customerPayments);
+    } catch (error) {
+      console.error('❌ Error loading payments data:', error);
+      setPaymentsData([]);
+    }
+  };
+  const handlePrint = () => {
+    if (!selectedCustomer || reportData.length === 0) {
+      showError('Print Error', 'Please select a customer and load data before printing');
+      return;
+    }
+
+    // Generate the HTML content matching the screenshot format
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Customer Report - ${selectedCustomerName}</title>
+          <style>
+            @page { margin: 0.5in; size: A4; }
+            * { box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+              font-size: 14px;
+              line-height: 1.5;
+              color: #000;
+              margin: 0;
+              padding: 20px;
+              background: white;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              margin-bottom: 30px;
+              padding-bottom: 15px;
+              border-bottom: 2px solid #e5e7eb;
+            }
+            .company-info {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+            .logo {
+              width: 50px;
+              height: 50px;
+              background: #2563eb;
+              border-radius: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 24px;
+              font-weight: bold;
+              color: white;
+            }
+            .company-text h1 {
+              font-size: 20px;
+              font-weight: bold;
+              margin: 0 0 2px 0;
+              color: #111827;
+            }
+            .company-text p {
+              font-size: 13px;
+              color: #6b7280;
+              margin: 0;
+            }
+            .date-info {
+              text-align: right;
+              font-size: 14px;
+              font-weight: 600;
+              color: #111827;
+            }
+            .customer-section {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 25px;
+              padding: 15px 0;
+            }
+            .customer-name {
+              flex: 1;
+            }
+            .customer-name label {
+              font-size: 12px;
+              color: #6b7280;
+              display: block;
+              margin-bottom: 4px;
+            }
+            .customer-name h2 {
+              font-size: 18px;
+              font-weight: 700;
+              margin: 0;
+              color: #111827;
+            }
+            .report-period {
+              text-align: right;
+            }
+            .report-period label {
+              font-size: 12px;
+              color: #6b7280;
+              display: block;
+              margin-bottom: 4px;
+            }
+            .report-period h3 {
+              font-size: 16px;
+              font-weight: 600;
+              margin: 0;
+              color: #111827;
+            }
+            .section-title {
+              font-size: 16px;
+              font-weight: 700;
+              margin: 30px 0 15px 0;
+              color: #111827;
+            }
+            .item-card {
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 16px 20px;
+              margin-bottom: 12px;
+              background: #f9fafb;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .item-name {
+              font-size: 15px;
+              font-weight: 600;
+              color: #111827;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            }
+            .chevron {
+              color: #9ca3af;
+            }
+            .item-stats {
+              display: flex;
+              gap: 40px;
+              align-items: center;
+            }
+            .stat {
+              text-align: right;
+            }
+            .stat-label {
+              font-size: 11px;
+              color: #6b7280;
+              display: block;
+              margin-bottom: 2px;
+            }
+            .stat-value {
+              font-size: 14px;
+              font-weight: 600;
+              color: #111827;
+            }
+            .stat-value.blue {
+              color: #2563eb;
+            }
+            .stat-value.green {
+              color: #059669;
+            }
+            .no-break {
+              page-break-inside: avoid;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-info">
+              <div class="logo">📋</div>
+              <div class="company-text">
+                <h1>Haype Construction</h1>
+                <p>Business Management System</p>
+              </div>
+            </div>
+            <div class="date-info">
+              ${format(new Date(), 'MMM dd, yyyy')}
+            </div>
+          </div>
+
+          <div class="customer-section">
+            <div class="customer-name">
+              <label>Customer</label>
+              <h2>${selectedCustomerName}</h2>
+            </div>
+            <div class="report-period">
+              <label>Report Period</label>
+              <h3>${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd, yyyy')}</h3>
+            </div>
+          </div>
+
+          <h2 class="section-title">Transaction Summary by Item</h2>
+
+          ${reportData.map(item => `
+            <div class="item-card no-break">
+              <div class="item-name">
+                <span class="chevron">›</span>
+                <span>${item.itemName}</span>
+              </div>
+              <div class="item-stats">
+                <div class="stat">
+                  <span class="stat-label">Total Quantity</span>
+                  <div class="stat-value blue">${item.totalQuantity} units</div>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Unit Price</span>
+                  <div class="stat-value">$${item.unitPrice}</div>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Total Value</span>
+                  <div class="stat-value green">$${item.totalValue.toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+
+        </body>
+      </html>
+    `;
+
+    // Use universal print function that works on both mobile and desktop
+    handlePrintContent(htmlContent, `Customer Report - ${selectedCustomerName}`);
+  };
+
+  const handleApplyFilter = () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer first');
+      return;
+    }
+
+    loadReportData();
+    const customerName = customers.find(c => c._id === selectedCustomer)?.customerName || '';
+    alert(`Filter applied for ${customerName} from ${format(dateRange.from, 'MMM dd')} to ${format(dateRange.to, 'MMM dd, yyyy')}`);
+  };
+
+  const handleAllData = async () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer first');
+      return;
+    }
+
+    try {
+      // Load all invoices and payments to find earliest date
+      const invoicesResponse = await invoicesAPI.getAll();
+      const paymentsResponse = await paymentsAPI.getAll();
+
+      const allInvoices = invoicesResponse.data;
+      const allPayments = paymentsResponse.data;
+
+      // Filter transactions for selected customer
+      const customerTransactions = [];
+      allInvoices.forEach(invoice => {
+        invoice.items?.forEach(item => {
+          const itemCustomerId = item.customerId?._id || item.customerId;
+          if (itemCustomerId === selectedCustomer && item.paymentMethod === 'credit') {
+            customerTransactions.push(new Date(invoice.invoiceDate));
+          }
+        });
+      });
+
+      // Filter payments for selected customer
+      const customerPayments = allPayments
+        .filter(p => (p.customerId?._id === selectedCustomer || p.customerId === selectedCustomer))
+        .map(p => new Date(p.paymentDate));
+
+      // Combine all dates
+      const allDates = [...customerTransactions, ...customerPayments].filter(d => !isNaN(d.getTime()));
+
+      if (allDates.length > 0) {
+        const earliestDate = new Date(Math.min(...allDates));
+        setDateRange({
+          from: earliestDate,
+          to: new Date()
+        });
+
+        // Reload data with new date range
+        setTimeout(() => {
+          loadReportData();
+          loadPaymentsData();
+        }, 100);
+
+        showSuccess('All Data Loaded', `Showing all data from ${format(earliestDate, 'MMM dd, yyyy')} to today`);
+      } else {
+        showError('No Data', 'No transactions found for this customer');
+      }
+    } catch (error) {
+      console.error('Error loading all data:', error);
+      showError('Error', 'Failed to load all data');
+    }
+  };
+
+  const toggleItemExpansion = (itemName) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [itemName]: !prev[itemName]
+    }));
+  };
+
+  const handleViewInvoice = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('view');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
+  };
+
+  const handleEditInvoice = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('edit');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
+  };
+
+  const handleMakePayment = async (invoiceNo) => {
+    try {
+      const response = await invoicesAPI.getAll();
+      const invoice = response.data.find(inv => inv.invoiceNo === invoiceNo);
+
+      if (invoice) {
+        setSelectedInvoice(invoice);
+        setModalMode('payment');
+        setShowModal(true);
+      } else {
+        showError('Not Found', `Invoice ${invoiceNo} not found`);
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      showError('Error', 'Failed to load invoice');
+    }
+  };
+
+  const handleDeletePayment = async (payment) => {
+    const confirmMessage = `🗑️ DELETE PAYMENT\n\n` +
+      `Payment Details:\n` +
+      `• Date: ${format(new Date(payment.paymentDate), 'MMM dd, yyyy')}\n` +
+      `• Type: ${payment.type === 'receive' ? 'Payment Received' : 'Credit Purchase'}\n` +
+      `• Amount: $${payment.amount.toLocaleString()}\n` +
+      `• Description: ${payment.description || 'No description'}\n` +
+      `• Invoice: ${payment.invoiceNo || 'N/A'}\n\n` +
+      `This will:\n` +
+      `• Delete the payment record permanently\n` +
+      `• Reverse the customer balance change: ${payment.type === 'receive' ? '+' : '-'}$${payment.amount.toLocaleString()}\n` +
+      `• This action cannot be undone!\n\n` +
+      `Are you sure you want to delete this payment?`;
+
+    if (window.confirm(confirmMessage)) {
+      try {
+        setLoading(true);
+        
+        // Delete payment from database
+        if (payment._id) {
+          await paymentsAPI.delete(payment._id);
+          console.log('✅ Payment deleted from database');
+        }
+        
+        // Reverse customer balance changes
+        const selectedCustomerData = customers.find(customer => customer._id === selectedCustomer);
+        if (selectedCustomerData) {
+          let newBalance = selectedCustomerData.balance || 0;
+          
+          if (payment.type === 'receive') {
+            // If it was a payment received, add back to customer balance (debt)
+            newBalance = newBalance + payment.amount;
+          } else {
+            // If it was a credit purchase, subtract from customer balance
+            newBalance = Math.max(0, newBalance - payment.amount);
+          }
+          
+          // Update customer balance
+          await customersAPI.update(selectedCustomer, { 
+            balance: newBalance
+          });
+          
+          console.log(`✅ Customer balance updated: $${newBalance}`);
+        }
+        
+        showSuccess(
+          'Payment Deleted', 
+          `Payment of $${payment.amount.toLocaleString()} has been deleted and customer balance has been updated!`
+        );
+        
+        // Reload data
+        loadReportData();
+        loadPaymentsData();
+        
+      } catch (error) {
+        console.error('❌ Error deleting payment:', error);
+        showError('Delete Failed', 'Failed to delete payment. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const selectedCustomerName = customers.find(c => c._id === selectedCustomer)?.customerName || '';
+
+  if (loading && customers.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <LoadingSpinner size={32} />
+          <p className="text-gray-600 mt-4">Loading customer data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Hidden in print */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between print:hidden">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Customer Reports</h1>
+          <p className="text-gray-600">Generate detailed customer transaction reports</p>
+        </div>
+        <Button onClick={handlePrint} variant="outline">
+          <Printer className="w-5 h-5 mr-2" />
+          Print Report
+        </Button>
+      </div>
+
+      {/* Filters - Hidden in print */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between space-y-4 lg:space-y-0 lg:space-x-6">
+          <div className="flex flex-col lg:flex-row lg:items-end space-y-4 lg:space-y-0 lg:space-x-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Customer</label>
+              <select
+                value={selectedCustomer}
+                onChange={(e) => setSelectedCustomer(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-48"
+              >
+                <option value="">Choose a customer</option>
+                {customers.map(customer => (
+                  <option key={customer._id} value={customer._id}>
+                    {customer.customerName}
+                  </option>
+                ))}
+              </select>
+
+                          <SearchInput
+                            placeholder="Search by name or phone..."
+                            value={searchTerm}
+                            onChange={setSearchTerm}
+                          />
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quick Filter</label>
+                <button
+                  onClick={handleAllData}
+                  className="border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+                >
+                  All Data
+                </button>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
+                <input
+                  type="date"
+                  value={format(dateRange.from, 'yyyy-MM-dd')}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
+                <input
+                  type="date"
+                  value={format(dateRange.to, 'yyyy-MM-dd')}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+          
+          <Button onClick={handleApplyFilter} className="lg:mb-0">
+            <Filter className="w-4 h-4 mr-2" />
+            Apply Filter
+          </Button>
+        </div>
+      </div>
+
+      {/* Report Content */}
+      {selectedCustomer && reportData.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 print:shadow-none print:border-none">
+          {/* Report Header */}
+          <div className="p-6 border-b border-gray-200 print:border-b-2 print:border-black">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <Building2 className="w-16 h-32 text-blue-600 mr-3" />
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Haype Construction</h2>
+                  <p className="text-gray-600">Business Management System</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Report Date</p>
+                <p className="font-semibold">{format(new Date(), 'MMM dd, yyyy')}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Customer</p>
+                <p className="text-lg font-semibold text-gray-900">{selectedCustomerName}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Report Period</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {format(dateRange.from, 'MMM dd')} - {format(dateRange.to, 'MMM dd, yyyy')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Report Data */}
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Transaction Summary by Item</h3>
+            
+            {/* Section Print Options for Customer Reports */}
+            <div className="mb-6 flex justify-end">
+              <SectionPrintOptions
+                data={(() => {
+                  // Flatten all transactions for export
+                  const allTransactions = [];
+                  reportData.forEach(item => {
+                    item.transactions.forEach(transaction => {
+                      allTransactions.push({
+                        date: transaction.date,
+                        invoiceNo: transaction.invoiceNo,
+                        itemName: item.itemName,
+                        carName: transaction.carName,
+                        quantity: transaction.quantity,
+                        price: transaction.price,
+                        total: transaction.total,
+                        paymentMethod: transaction.paymentMethod
+                      });
+                    });
+                  });
+                  return allTransactions;
+                })()}
+                columns={[
+                  { header: 'Date', accessor: 'date' },
+                  { header: 'Invoice No', accessor: 'invoiceNo' },
+                  { header: 'Item Name', accessor: 'itemName' },
+                  { header: 'Car Name', accessor: 'carName' },
+                  { header: 'Quantity', accessor: 'quantity' },
+                  { header: 'Price', accessor: 'price' },
+                  { header: 'Total', accessor: 'total' },
+                  { header: 'Payment Method', accessor: 'paymentMethod' }
+                ]}
+                title="Customer Reports"
+                sectionName="Customer Transaction Report"
+                profileData={{
+                  'Customer Name': selectedCustomerName,
+                  'Report Period': `${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd, yyyy')}`,
+                  'Total Items': `${reportData.length} different items`,
+                  'Total Transactions': `${reportData.reduce((sum, item) => sum + item.transactions.length, 0)} transactions`,
+                  'Total Value': `$${reportData.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}`,
+                  'Total Payments': `$${paymentsData.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+                }}
+                dateRange={dateRange}
+              />
+            </div>
+            
+            <div className="space-y-4">
+              {reportData.map((item, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Item Header - Clickable */}
+                  <div 
+                    className="p-4 bg-white cursor-pointer hover:bg-gray-50 transition-colors print:cursor-default print:hover:bg-white print:bg-white"
+                    onClick={() => toggleItemExpansion(item.itemName)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="print:hidden">
+                          {expandedItems[item.itemName] ? (
+                            <ChevronDown className="w-5 h-5 text-gray-500 mr-2" />
+                          ) : (
+                            <ChevronRight className="w-5 h-5 text-gray-500 mr-2" />
+                          )}
+                        </div>
+                        <h4 className="text-lg font-semibold text-gray-900">{item.itemName}</h4>
+                      </div>
+                      <div className="grid grid-cols-3 gap-8 text-center">
+                        <div>
+                          <p className="text-sm text-gray-600">Total Quantity</p>
+                          <p className="font-semibold text-blue-600">{item.totalQuantity} units</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Unit Price</p>
+                          <p className="font-semibold text-gray-900">${item.unitPrice}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Total Value</p>
+                          <p className="font-semibold text-green-600">${item.totalValue.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Transaction Details - Expandable */}
+                  {(expandedItems[item.itemName] || window.matchMedia('print').matches) && (
+                    <div className="p-4 border-t border-gray-200 bg-white print:bg-white">
+                      <h5 className="font-medium text-gray-900 mb-3">Transaction Details:</h5>
+                      
+                      {/* Transaction Table */}
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full bg-white print:bg-white">
+                          <thead>
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Date</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Invoice No</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Car Name</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Description</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Quantity</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Price</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Total</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Payment</th>
+                              <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white print:hidden">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white print:bg-white">
+                            {item.transactions.map((transaction, txIndex) => (
+                              <tr key={txIndex} className="border-b border-gray-100 hover:bg-gray-50 print:hover:bg-white bg-white print:bg-white">
+                                <td className="py-2 px-3 text-sm text-gray-600 bg-white print:bg-white">
+                                  {format(new Date(transaction.date), 'MMM dd, yyyy')}
+                                </td>
+                                <td className="py-2 px-3 text-sm font-medium text-blue-600 bg-white print:bg-white">
+                                  {transaction.invoiceNo}
+                                </td>
+                                <td className="py-2 px-3 text-sm text-gray-900 bg-white print:bg-white">
+                                  {transaction.carName}
+                                </td>
+                                <td className="py-2 px-3 text-sm text-gray-600 bg-white print:bg-white">
+                                  {transaction.description || 'No description'}
+                                </td>
+                                <td className="py-2 px-3 text-sm font-medium text-gray-900 bg-white print:bg-white">
+                                  {transaction.quantity} units
+                                </td>
+                                <td className="py-2 px-3 text-sm text-gray-600 bg-white print:bg-white">
+                                  ${transaction.price}
+                                </td>
+                                <td className="py-2 px-3 text-sm font-semibold text-green-600 bg-white print:bg-white">
+                                  ${transaction.total.toLocaleString()}
+                                </td>
+                                <td className="py-2 px-3 text-sm bg-white print:bg-white">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    transaction.paymentMethod === 'cash' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {transaction.paymentMethod?.toUpperCase() || 'CASH'}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-sm print:hidden bg-white">
+                                  <div className="flex items-center space-x-2">
+                                    <button
+                                      onClick={() => handleViewInvoice(transaction.invoiceNo)}
+                                      className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="View Invoice"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleEditInvoice(transaction.invoiceNo)}
+                                      className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                      title="Edit Invoice"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleMakePayment(transaction.invoiceNo)}
+                                      className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                      title="Make Payment"
+                                    >
+                                      <CreditCard className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Grand Total */}
+            <div className="mt-6 bg-white border border-gray-300 rounded-lg p-4 print:bg-white print:border-gray-400">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-gray-900">Grand Total</h4>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Total Value</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ${reportData.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 mt-3">
+                <div>
+                  <p className="text-sm text-gray-600">Total Items</p>
+                  <p className="font-semibold text-gray-900">{reportData.length} different items</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total Transactions</p>
+                  <p className="font-semibold text-gray-900">
+                    {reportData.reduce((sum, item) => sum + item.transactions.length, 0)} transactions
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total Quantity</p>
+                  <p className="font-semibold text-gray-900">
+                    {reportData.reduce((sum, item) => sum + item.totalQuantity, 0)} units
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Customer Payments Section */}
+            {paymentsData.length > 0 && (
+              <div className="mt-6 bg-white border border-gray-300 rounded-lg p-4 print:bg-white print:border-gray-400">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Customer Payments History</h4>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full bg-white print:bg-white">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Date</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Type</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Invoice No</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Description</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Amount</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white">Balance Impact</th>
+                        <th className="text-left py-2 px-3 text-sm font-medium text-gray-700 bg-white print:bg-white print:hidden">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white print:bg-white">
+                      {paymentsData.map((payment, index) => (
+                        <tr key={index} className="border-b border-gray-100 bg-white print:bg-white">
+                          <td className="py-2 px-3 text-sm text-gray-600 bg-white print:bg-white">
+                            {format(new Date(payment.paymentDate), 'MMM dd, yyyy')}
+                          </td>
+                          <td className="py-2 px-3 text-sm bg-white print:bg-white">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              payment.type === 'receive' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {payment.type === 'receive' ? 'Payment Received' : 'Credit Purchase'}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-sm font-medium text-blue-600 bg-white print:bg-white">
+                            {payment.invoiceNo || 'N/A'}
+                          </td>
+                          <td className="py-2 px-3 text-sm text-gray-700 bg-white print:bg-white">
+                            {payment.description || 'No description'}
+                          </td>
+                          <td className="py-2 px-3 text-sm font-semibold bg-white print:bg-white">
+                            <span className={payment.type === 'receive' ? 'text-green-600' : 'text-blue-600'}>
+                              {payment.type === 'receive' ? '-' : '+'}${payment.amount.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-xs text-gray-600 bg-white print:bg-white">
+                            {payment.type === 'receive' 
+                              ? 'Reduced balance' 
+                              : 'Added to balance'
+                            }
+                          </td>
+                          <td className="py-2 px-3 text-sm print:hidden bg-white">
+                            <div className="flex items-center space-x-2">
+                              {payment.invoiceNo && (
+                                <>
+                                  <button
+                                    onClick={() => handleViewInvoice(payment.invoiceNo)}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="View Invoice"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditInvoice(payment.invoiceNo)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                    title="Edit Invoice"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                onClick={() => handleDeletePayment(payment)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete Payment"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Customer Payments Summary */}
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <p className="text-sm text-green-700">Total Payments Received</p>
+                    <p className="font-semibold text-green-600">
+                      ${paymentsData
+                        .filter(p => p.type === 'receive')
+                        .reduce((sum, p) => sum + p.amount, 0)
+                        .toLocaleString()}
+                    </p>
+                    <p className="text-xs text-green-600">Balance reduced</p>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-700">Total Credit Purchases</p>
+                    <p className="font-semibold text-blue-600">
+                      ${paymentsData
+                        .filter(p => p.type === 'credit_purchase')
+                        .reduce((sum, p) => sum + p.amount, 0)
+                        .toLocaleString()}
+                    </p>
+                    <p className="text-xs text-blue-600">Balance increased</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* No Customer Selected */}
+      {!selectedCustomer && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+          <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a Customer</h3>
+          <p className="text-gray-600">Choose a customer from the dropdown above to generate their detailed report.</p>
+        </div>
+      )}
+
+      {/* No Data Found */}
+      {selectedCustomer && reportData.length === 0 && !loading && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+          <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Transactions Found</h3>
+          <p className="text-gray-600">No transactions found for {selectedCustomerName} in the selected date range.</p>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && selectedCustomer && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+          <LoadingSpinner size={32} />
+          <p className="text-gray-600 mt-4">Loading report data...</p>
+        </div>
+      )}
+
+      {/* Invoice Modal */}
+      <InvoiceModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedInvoice(null);
+          loadReportData();
+          loadPaymentsData();
+        }}
+        mode={modalMode}
+        invoice={selectedInvoice}
+      />
+
+<Footer/>
+
+    </div>
+  );
+};
+
+export default CustomerReports;
