@@ -134,6 +134,53 @@ const Customer = mongoose.model('Customer', customerSchema);
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
 
+// Helper function to recalculate customer balance
+async function recalculateCustomerBalance(customerId) {
+  try {
+    console.log(`💰 Recalculating balance for customer: ${customerId}`);
+
+    // Get all invoices for this customer
+    const invoices = await Invoice.find({ status: 'Active' })
+      .populate('items.customerId');
+
+    // Calculate total credit amount for this customer across all invoices
+    let totalCredited = 0;
+    invoices.forEach(invoice => {
+      invoice.items.forEach(item => {
+        if (item.customerId && item.customerId._id.toString() === customerId.toString()) {
+          if (item.paymentMethod === 'credit') {
+            totalCredited += item.leftAmount || 0;
+          }
+        }
+      });
+    });
+
+    // Get all payments received from this customer
+    const payments = await Payment.find({
+      customerId: customerId,
+      type: 'receive'
+    });
+
+    const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
+
+    // Calculate final balance: Total Credit - Total Payments
+    const finalBalance = Math.max(0, totalCredited - totalPayments);
+
+    // Update customer balance in database
+    await Customer.findByIdAndUpdate(customerId, {
+      balance: finalBalance,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Customer balance updated: Credited=$${totalCredited}, Payments=$${totalPayments}, Balance=$${finalBalance}`);
+
+    return finalBalance;
+  } catch (error) {
+    console.error(`❌ Error recalculating customer balance:`, error);
+    throw error;
+  }
+}
+
 // Initialize only admin user
 async function initializeAdminUser() {
   try {
@@ -652,64 +699,6 @@ app.get('/api/employees/:id/payment-history', authenticateToken, async (req, res
   }
 });
 
-// Update payment record
-app.put('/api/payments/:id', authenticateToken, async (req, res) => {
-  try {
-    const { amount, date, description } = req.body;
-    const paymentId = req.params.id;
-
-    // Get the payment to update
-    const payment = await Payment.findById(paymentId);
-    if (!payment) {
-      return res.status(404).json({ error: 'Payment not found' });
-    }
-
-    // Get the employee
-    const employee = await Employee.findById(payment.employeeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    // Calculate balance adjustment
-    const oldAmount = payment.amount;
-    const newAmount = parseFloat(amount);
-    const amountDifference = newAmount - oldAmount;
-
-    // Update employee balance based on payment type
-    let newBalance = employee.balance;
-    if (payment.type === 'balance_add') {
-      newBalance = employee.balance + amountDifference;
-    } else if (payment.type === 'balance_deduct') {
-      newBalance = Math.max(0, employee.balance - amountDifference);
-    }
-
-    // Update employee balance
-    await Employee.findByIdAndUpdate(employee._id, { balance: newBalance });
-
-    // Update payment record
-    const updatedPayment = await Payment.findByIdAndUpdate(
-      paymentId,
-      {
-        amount: newAmount,
-        paymentDate: new Date(date),
-        description: description,
-        balanceAfter: newBalance
-      },
-      { new: true }
-    );
-
-    res.json({
-      success: true,
-      message: 'Payment updated successfully',
-      payment: updatedPayment,
-      newBalance: newBalance
-    });
-  } catch (error) {
-    console.error('Update payment error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // Items Routes
 app.get('/api/items', authenticateToken, async (req, res) => {
   try {
@@ -931,6 +920,12 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
       // totalProfit
     });
 
+    // Recalculate balance for all affected customers
+    const customerIds = [...new Set(items.map(item => item.customerId).filter(id => id))];
+    for (const customerId of customerIds) {
+      await recalculateCustomerBalance(customerId);
+    }
+
     res.json({
       success: true,
       message: 'Invoice created successfully',
@@ -965,16 +960,28 @@ app.get('/api/invoices/:id', authenticateToken, async (req, res) => {
 
 app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
   try {
+    // Get old invoice to find affected customers
+    const oldInvoice = await Invoice.findById(req.params.id);
+    if (!oldInvoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
     const updatedInvoice = await Invoice.findByIdAndUpdate(
       req.params.id,
       { ...req.body, updatedAt: new Date() },
       { new: true }
     );
-    
-    if (!updatedInvoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
+
+    // Collect all affected customer IDs (both old and new)
+    const oldCustomerIds = oldInvoice.items.map(item => item.customerId?.toString()).filter(id => id);
+    const newCustomerIds = req.body.items?.map(item => item.customerId?.toString()).filter(id => id) || [];
+    const allCustomerIds = [...new Set([...oldCustomerIds, ...newCustomerIds])];
+
+    // Recalculate balance for all affected customers
+    for (const customerId of allCustomerIds) {
+      await recalculateCustomerBalance(customerId);
     }
-    
+
     res.json({
       success: true,
       message: 'Invoice updated successfully',
@@ -989,11 +996,17 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
 app.delete('/api/invoices/:id', authenticateToken, async (req, res) => {
   try {
     const deletedInvoice = await Invoice.findByIdAndDelete(req.params.id);
-    
+
     if (!deletedInvoice) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
-    
+
+    // Recalculate balance for all affected customers
+    const customerIds = [...new Set(deletedInvoice.items.map(item => item.customerId?.toString()).filter(id => id))];
+    for (const customerId of customerIds) {
+      await recalculateCustomerBalance(customerId);
+    }
+
     res.json({
       success: true,
       message: 'Invoice deleted successfully'
@@ -1029,13 +1042,8 @@ app.post('/api/payments/receive', authenticateToken, async (req, res) => {
       paymentDate
     });
 
-  
-
-    // Update customer balance
-    await Customer.findByIdAndUpdate(customerId, {
-      $inc: { balance: -amount },
-      updatedAt: new Date()
-    });
+    // Recalculate customer balance
+    await recalculateCustomerBalance(customerId);
 
     res.json({
       success: true,
@@ -1117,8 +1125,8 @@ app.get('/api/payments', authenticateToken, async (req, res) => {
 
 
 
-// UPDATE PAYMENT - NEW ROUTE
-app.put('/api/payments/:id', async (req, res) => {
+// UPDATE PAYMENT - Handles all payment types (receive, payment_out, employee payments)
+app.put('/api/payments/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { paymentNo, amount, description, paymentDate, customerId, carId } = req.body;
@@ -1130,11 +1138,6 @@ app.put('/api/payments/:id', async (req, res) => {
     if (!originalPayment) {
       return res.status(404).json({ error: 'Payment not found' });
     }
-
-    const originalAmount = originalPayment.amount;
-    const amountDifference = amount - originalAmount;
-
-    console.log('💰 Payment update - Original:', originalAmount, 'New:', amount, 'Difference:', amountDifference);
 
     // Update the payment
     const updatedPayment = await Payment.findByIdAndUpdate(
@@ -1151,36 +1154,49 @@ app.put('/api/payments/:id', async (req, res) => {
     ).populate('customerId', 'customerName phoneNumber')
      .populate('carId', 'carName numberPlate');
 
-    console.log('✅ Payment updated in database:', updatedPayment);
+    console.log('✅ Payment updated in database');
 
-    // Update customer balance if there's a difference and it's a customer payment
-    if (amountDifference !== 0 && (customerId || originalPayment.customerId)) {
+    // Handle balance updates based on payment type
+    if (originalPayment.type === 'receive') {
+      // Customer payment - recalculate customer balance
       const targetCustomerId = customerId || originalPayment.customerId;
-      const customer = await Customer.findById(targetCustomerId);
-      
-      if (customer) {
-        if (originalPayment.type === 'receive') {
-          // For payment received: if amount increases, customer balance should decrease more
-          const newBalance = Math.max(0, (customer.balance || 0) - amountDifference);
-          customer.balance = newBalance;
-          await customer.save();
-          console.log(`💰 Customer balance adjusted: ${customer.balance + amountDifference} - ${amountDifference} = ${newBalance}`);
-        }
+      if (targetCustomerId) {
+        await recalculateCustomerBalance(targetCustomerId);
       }
-    }
+    } else if (originalPayment.type === 'payment_out' && (carId || originalPayment.carId)) {
+      // Car payment - update car left amount (keep existing logic)
+      const originalAmount = originalPayment.amount;
+      const amountDifference = amount - originalAmount;
 
-    // Update car balance if there's a difference and it's a car payment
-    if (amountDifference !== 0 && (carId || originalPayment.carId)) {
-      const targetCarId = carId || originalPayment.carId;
-      const car = await Car.findById(targetCarId);
-      
-      if (car) {
-        if (originalPayment.type === 'payment_out') {
-          // For payment out: if amount increases, car left should increase
+      if (amountDifference !== 0) {
+        const targetCarId = carId || originalPayment.carId;
+        const car = await Car.findById(targetCarId);
+
+        if (car) {
           const newLeft = Math.max(0, (car.left || 0) + amountDifference);
           car.left = newLeft;
           await car.save();
-          console.log(`🚗 Car left amount adjusted: ${car.left - amountDifference} + ${amountDifference} = ${newLeft}`);
+          console.log(`🚗 Car left amount adjusted: +${amountDifference} = ${newLeft}`);
+        }
+      }
+    } else if (originalPayment.type === 'balance_add' || originalPayment.type === 'balance_deduct') {
+      // Employee payment - update employee balance
+      if (originalPayment.employeeId) {
+        const employee = await Employee.findById(originalPayment.employeeId);
+        if (employee) {
+          const originalAmount = originalPayment.amount;
+          const amountDifference = amount - originalAmount;
+
+          let newBalance = employee.balance;
+          if (originalPayment.type === 'balance_add') {
+            newBalance = employee.balance + amountDifference;
+          } else if (originalPayment.type === 'balance_deduct') {
+            newBalance = Math.max(0, employee.balance - amountDifference);
+          }
+
+          employee.balance = newBalance;
+          await employee.save();
+          console.log(`👤 Employee balance adjusted: ${originalPayment.type} by ${amountDifference} = ${newBalance}`);
         }
       }
     }
@@ -1215,21 +1231,20 @@ app.delete('/api/payments/:id', authenticateToken, async (req, res) => {
       carId: payment.carId?._id
     });
 
-    // Reverse balance changes before deletion based on payment type
+    // Delete the payment first
+    await Payment.findByIdAndDelete(id);
+    console.log('✅ Payment deleted from database');
+
+    // Reverse balance changes after deletion based on payment type
     if (payment.type === 'receive' && payment.customerId) {
-      // For payment received: add back to customer balance (increase debt)
-      const customer = await Customer.findById(payment.customerId._id);
-      if (customer) {
-        const newBalance = (customer.balance || 0) + payment.amount;
-        customer.balance = newBalance;
-        await customer.save();
-        console.log(`✅ Customer ${customer.customerName} balance restored: +$${payment.amount} = $${newBalance}`);
-      }
+      // Customer payment - recalculate customer balance
+      await recalculateCustomerBalance(payment.customerId._id || payment.customerId);
+      console.log(`✅ Customer balance recalculated after payment deletion`);
     }
 
     if (payment.type === 'payment_out' && payment.carId) {
       // For payment out: reduce car left amount
-      const car = await Car.findById(payment.carId._id);
+      const car = await Car.findById(payment.carId._id || payment.carId);
       if (car) {
         const newLeft = Math.max(0, (car.left || 0) - payment.amount);
         car.left = newLeft;
@@ -1255,10 +1270,6 @@ app.delete('/api/payments/:id', authenticateToken, async (req, res) => {
         console.log(`✅ Employee balance reversed: ${payment.type === 'balance_add' ? '-' : '+'}$${payment.amount} = $${newBalance}`);
       }
     }
-
-    // Delete the payment
-    await Payment.findByIdAndDelete(id);
-    console.log('✅ Payment deleted from database');
  
     res.json({ success: true, message: 'Payment deleted successfully' });
   } catch (error) {
